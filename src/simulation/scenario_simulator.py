@@ -55,7 +55,7 @@ class ScenarioSimulator:
             "description": "Simulate impact of a team member leaving",
             "parameters": {
                 "departing_member": {
-                    "options": ["Ryan", "Dhyanesh", "Riaz", "Nayan", "Jhanvi"],
+                    "options": ["Raj", "Ryan", "Dhyanesh", "Riaz", "Nayan", "Lakshmi", "Jhanvi"],
                     "description": "Team member who might leave"
                 },
                 "notice_period_days": {
@@ -159,6 +159,27 @@ class ScenarioSimulator:
         self.query_engine = query_engine
         self.metrics = metrics_store
 
+    def _convert_param(self, value, default=0):
+        """Convert parameter value to appropriate type"""
+        if value is None:
+            return default
+        if isinstance(value, (int, float)):
+            return value
+        if isinstance(value, str):
+            # Handle boolean strings
+            if value.lower() in ('true', 'yes', '1'):
+                return True
+            if value.lower() in ('false', 'no', '0'):
+                return False
+            # Try numeric conversion
+            try:
+                if '.' in value:
+                    return float(value)
+                return int(value)
+            except ValueError:
+                return value
+        return value
+
     def get_available_scenarios(self) -> List[Dict]:
         """Get list of available scenario templates"""
         scenarios = []
@@ -259,8 +280,8 @@ class ScenarioSimulator:
     def _model_resource_departure(self, params: Dict) -> Dict:
         """Model impact of team member departure"""
         member = params.get("departing_member", "Dhyanesh")
-        notice_days = params.get("notice_period_days", 14)
-        replacement_days = params.get("replacement_time_days", 21)
+        notice_days = self._convert_param(params.get("notice_period_days"), 14)
+        replacement_days = self._convert_param(params.get("replacement_time_days"), 21)
 
         member_info = self.TEAM_CAPABILITIES.get(member, {})
         velocity_loss = member_info.get("velocity", 20)
@@ -292,9 +313,9 @@ class ScenarioSimulator:
 
     def _model_scope_addition(self, params: Dict) -> Dict:
         """Model impact of scope addition"""
-        story_points = params.get("story_points", 30)
+        story_points = self._convert_param(params.get("story_points"), 30)
         stream = params.get("stream", "SD")
-        cr_approved = params.get("cr_approved", True)
+        cr_approved = self._convert_param(params.get("cr_approved"), True)
 
         # Calculate timeline impact (assuming 20 SP/week velocity)
         weeks_needed = story_points / 20
@@ -358,7 +379,7 @@ class ScenarioSimulator:
 
     def _model_timeline_change(self, params: Dict) -> Dict:
         """Model impact of timeline changes"""
-        days_change = params.get("days_change", 0)
+        days_change = self._convert_param(params.get("days_change"), 0)
         milestone = params.get("affected_milestone", "Stream 2 Go-Live")
 
         # Positive days = more time = lower risk
@@ -387,7 +408,7 @@ class ScenarioSimulator:
 
     def _model_budget_pressure(self, params: Dict) -> Dict:
         """Model impact of budget pressure response"""
-        reduction_pct = params.get("budget_reduction_pct", 10)
+        reduction_pct = self._convert_param(params.get("budget_reduction_pct"), 10)
         strategy = params.get("response_strategy", "Reduce scope")
 
         base_budget = 1850000
