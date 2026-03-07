@@ -27,6 +27,7 @@ project-kg-chatbot/
 │   ├── simulation/    # Forecaster & scenario simulator
 │   └── time_series/   # Metrics store & trend analyzer
 ├── ui/templates/      # HTML templates (Jinja2)
+├── scripts/           # Server management scripts
 ├── config/            # Settings & ontology
 └── tests/             # Unit tests
 ```
@@ -47,6 +48,40 @@ pip install -r requirements-minimal.txt
 ```
 
 ## Running the Application
+
+### Using Scripts (Recommended)
+
+**Windows (Command Prompt):**
+```batch
+# Start server (default port 8888)
+scripts\start_server.bat
+
+# Start on custom port
+scripts\start_server.bat 9000
+
+# Check server status
+scripts\status.bat
+
+# Stop server
+scripts\stop_server.bat
+```
+
+**Unix/Mac (Terminal):**
+```bash
+# Make executable (one time)
+chmod +x scripts/*.sh
+
+# Start server
+./scripts/start_server.sh
+
+# Check server status
+./scripts/status.sh
+
+# Stop server
+./scripts/stop_server.sh
+```
+
+### Manual Start
 
 ```bash
 # Start the FastAPI server
