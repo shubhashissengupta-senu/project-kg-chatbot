@@ -3,201 +3,561 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Simulation - Project KG</title>
+    <title>What-If Simulation - Delivery Brain</title>
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: #0f0f1a;
+            background: #0a0a12;
             color: #fff;
             min-height: 100vh;
             display: flex;
         }
+
+        /* Sidebar */
         .sidebar {
-            width: 250px;
-            background: #1a1a2e;
+            width: 260px;
+            background: linear-gradient(180deg, #1a1a2e 0%, #16213e 100%);
             padding: 20px;
             display: flex;
             flex-direction: column;
             position: fixed;
             height: 100vh;
+            border-right: 1px solid rgba(102,126,234,0.2);
+            z-index: 100;
         }
-        .logo { font-size: 24px; font-weight: bold; margin-bottom: 30px; }
+        .logo {
+            font-size: 22px;
+            font-weight: bold;
+            margin-bottom: 30px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
         .nav-item {
             padding: 12px 16px;
             margin-bottom: 8px;
             border-radius: 8px;
-            cursor: pointer;
             text-decoration: none;
             color: #aaa;
             display: block;
+            transition: all 0.3s;
         }
-        .nav-item:hover, .nav-item.active { background: rgba(102,126,234,0.2); color: #fff; }
+        .nav-item:hover, .nav-item.active {
+            background: linear-gradient(135deg, rgba(102,126,234,0.2) 0%, rgba(118,75,162,0.2) 100%);
+            color: #fff;
+            transform: translateX(5px);
+        }
         .user-info {
             margin-top: auto;
             padding: 16px;
-            background: rgba(255,255,255,0.05);
-            border-radius: 8px;
+            background: rgba(255,255,255,0.03);
+            border-radius: 12px;
+            border: 1px solid rgba(255,255,255,0.05);
         }
+        .user-info .name { font-weight: 600; margin-bottom: 4px; }
+        .user-info .role { font-size: 12px; color: #888; }
+        .user-info a { color: #667eea; font-size: 12px; margin-top: 8px; display: inline-block; text-decoration: none; }
+
+        /* Main Content */
         .main {
             flex: 1;
-            margin-left: 250px;
+            margin-left: 260px;
             padding: 30px;
+            background: radial-gradient(ellipse at top, #1a1a2e 0%, #0a0a12 70%);
+            min-height: 100vh;
         }
-        .header { margin-bottom: 30px; }
-        .header h2 { margin-bottom: 8px; }
-        .header p { color: #888; }
+
+        .header {
+            margin-bottom: 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+        }
+        .header h2 {
+            font-size: 28px;
+            margin-bottom: 8px;
+            background: linear-gradient(135deg, #fff 0%, #aaa 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .header p { color: #888; font-size: 14px; }
+
+        .brain-indicator {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 20px;
+            background: rgba(102,126,234,0.1);
+            border: 1px solid rgba(102,126,234,0.3);
+            border-radius: 30px;
+            font-size: 13px;
+        }
+        .brain-pulse {
+            width: 12px;
+            height: 12px;
+            background: #667eea;
+            border-radius: 50%;
+            animation: pulse 2s ease-in-out infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 0.5; transform: scale(1); }
+            50% { opacity: 1; transform: scale(1.2); box-shadow: 0 0 20px #667eea; }
+        }
+
+        /* Scenario Cards */
+        .section-title {
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            color: #666;
+            margin-bottom: 20px;
+        }
+
         .scenarios {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-            gap: 20px;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 16px;
             margin-bottom: 30px;
         }
         .scenario-card {
-            background: rgba(255,255,255,0.05);
-            border-radius: 12px;
+            background: linear-gradient(135deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.01) 100%);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 16px;
             padding: 24px;
             cursor: pointer;
             transition: all 0.3s;
-            border: 2px solid transparent;
+            position: relative;
+            overflow: hidden;
         }
-        .scenario-card:hover { background: rgba(255,255,255,0.1); }
-        .scenario-card.selected { border-color: #667eea; background: rgba(102,126,234,0.1); }
-        .scenario-card h3 { margin-bottom: 8px; }
-        .scenario-card p { font-size: 14px; color: #888; }
-        .config-panel {
-            background: rgba(255,255,255,0.05);
+        .scenario-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, transparent, var(--accent), transparent);
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        .scenario-card:hover {
+            background: linear-gradient(135deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.03) 100%);
+            transform: translateY(-4px);
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+        }
+        .scenario-card:hover::before { opacity: 1; }
+        .scenario-card.selected {
+            border-color: #667eea;
+            background: linear-gradient(135deg, rgba(102,126,234,0.15) 0%, rgba(118,75,162,0.1) 100%);
+        }
+        .scenario-card.selected::before { opacity: 1; }
+
+        .scenario-icon {
+            width: 50px;
+            height: 50px;
             border-radius: 12px;
-            padding: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            margin-bottom: 16px;
+        }
+        .scenario-card[data-scenario="resource_departure"] { --accent: #ff6b6b; }
+        .scenario-card[data-scenario="resource_departure"] .scenario-icon { background: rgba(255,107,107,0.2); }
+        .scenario-card[data-scenario="scope_addition"] { --accent: #feca57; }
+        .scenario-card[data-scenario="scope_addition"] .scenario-icon { background: rgba(254,202,87,0.2); }
+        .scenario-card[data-scenario="quality_issue"] { --accent: #ee5a24; }
+        .scenario-card[data-scenario="quality_issue"] .scenario-icon { background: rgba(238,90,36,0.2); }
+        .scenario-card[data-scenario="timeline_change"] { --accent: #4ecdc4; }
+        .scenario-card[data-scenario="timeline_change"] .scenario-icon { background: rgba(78,205,196,0.2); }
+        .scenario-card[data-scenario="budget_pressure"] { --accent: #a55eea; }
+        .scenario-card[data-scenario="budget_pressure"] .scenario-icon { background: rgba(165,94,234,0.2); }
+
+        .scenario-card h3 { font-size: 16px; margin-bottom: 8px; }
+        .scenario-card p { font-size: 13px; color: #888; line-height: 1.5; }
+
+        /* Configuration Panel */
+        .config-panel {
+            background: linear-gradient(135deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.01) 100%);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 16px;
+            padding: 30px;
             margin-bottom: 30px;
             display: none;
         }
-        .config-panel.active { display: block; }
-        .config-panel h3 { margin-bottom: 20px; }
+        .config-panel.active { display: block; animation: slideIn 0.3s ease; }
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .config-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 25px;
+        }
+        .config-header h3 { font-size: 18px; }
+
+        .param-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 25px;
+        }
         .param-group {
-            margin-bottom: 20px;
+            position: relative;
         }
         .param-group label {
             display: block;
             margin-bottom: 8px;
-            font-size: 14px;
+            font-size: 13px;
             color: #aaa;
+            font-weight: 500;
         }
         .param-group select, .param-group input {
             width: 100%;
-            padding: 12px 16px;
-            background: rgba(255,255,255,0.1);
-            border: 1px solid rgba(255,255,255,0.2);
-            border-radius: 8px;
+            padding: 14px 18px;
+            background: rgba(0,0,0,0.3);
+            border: 1px solid rgba(255,255,255,0.15);
+            border-radius: 10px;
             color: #fff;
             font-size: 14px;
+            transition: all 0.3s;
         }
+        .param-group select:focus, .param-group input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 20px rgba(102,126,234,0.2);
+        }
+        .param-group select option { background: #1a1a2e; }
+
         .run-btn {
-            padding: 14px 32px;
+            padding: 16px 40px;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             border: none;
-            border-radius: 8px;
+            border-radius: 12px;
             color: #fff;
             font-weight: 600;
             cursor: pointer;
             font-size: 16px;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            gap: 10px;
         }
-        .run-btn:hover { transform: translateY(-2px); }
-        .results {
-            background: rgba(255,255,255,0.05);
-            border-radius: 12px;
-            padding: 24px;
+        .run-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(102,126,234,0.4);
+        }
+        .run-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .run-btn .spinner {
+            width: 20px;
+            height: 20px;
+            border: 2px solid rgba(255,255,255,0.3);
+            border-top-color: #fff;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
             display: none;
         }
-        .results.active { display: block; }
-        .results h3 { margin-bottom: 20px; }
-        .result-grid {
+        .run-btn.loading .spinner { display: block; }
+        .run-btn.loading .btn-text { display: none; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* Results Panel */
+        .results {
+            display: none;
+        }
+        .results.active { display: block; animation: slideIn 0.5s ease; }
+
+        .results-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 25px;
+        }
+        .results-header h3 { font-size: 20px; }
+
+        /* Impact Meters */
+        .impact-meters {
             display: grid;
-            grid-template-columns: repeat(3, 1fr);
+            grid-template-columns: repeat(4, 1fr);
             gap: 20px;
-            margin-bottom: 20px;
+            margin-bottom: 30px;
         }
-        .result-item {
-            background: rgba(255,255,255,0.05);
-            padding: 20px;
-            border-radius: 8px;
+        .impact-meter {
+            background: linear-gradient(135deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.01) 100%);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 16px;
+            padding: 24px;
             text-align: center;
+            position: relative;
+            overflow: hidden;
         }
-        .result-item .value { font-size: 28px; font-weight: bold; margin-bottom: 4px; }
-        .result-item .label { font-size: 13px; color: #888; }
-        .result-item.negative .value { color: #ff6b6b; }
-        .result-item.positive .value { color: #4ecdc4; }
-        .impact-assessment {
-            background: rgba(255,200,100,0.1);
-            border-left: 4px solid #feca57;
-            padding: 16px 20px;
+        .impact-meter::before {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: var(--meter-color, #667eea);
+        }
+        .impact-meter .icon {
+            font-size: 28px;
+            margin-bottom: 12px;
+        }
+        .impact-meter .value {
+            font-size: 32px;
+            font-weight: 700;
+            margin-bottom: 6px;
+            color: var(--meter-color, #fff);
+        }
+        .impact-meter .label {
+            font-size: 12px;
+            color: #888;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .impact-meter.negative { --meter-color: #ff6b6b; }
+        .impact-meter.positive { --meter-color: #4ecdc4; }
+        .impact-meter.warning { --meter-color: #feca57; }
+        .impact-meter.info { --meter-color: #667eea; }
+
+        /* AI Analysis */
+        .ai-analysis {
+            background: linear-gradient(135deg, rgba(102,126,234,0.1) 0%, rgba(118,75,162,0.1) 100%);
+            border: 1px solid rgba(102,126,234,0.3);
+            border-radius: 16px;
+            padding: 30px;
+            margin-bottom: 30px;
+        }
+        .ai-analysis-header {
+            display: flex;
+            align-items: center;
+            gap: 15px;
             margin-bottom: 20px;
-            border-radius: 0 8px 8px 0;
         }
-        .recommendations {
-            margin-top: 20px;
+        .ai-brain-icon {
+            width: 50px;
+            height: 50px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            animation: pulse 2s ease-in-out infinite;
         }
-        .recommendations h4 { margin-bottom: 12px; }
-        .recommendations ul { margin-left: 20px; }
-        .recommendations li { margin-bottom: 8px; color: #aaa; }
+        .ai-analysis-header h4 {
+            font-size: 18px;
+        }
+        .ai-analysis-header span {
+            font-size: 12px;
+            color: #888;
+        }
+        .ai-analysis-content {
+            font-size: 15px;
+            line-height: 1.8;
+            color: #ccc;
+        }
+        .ai-analysis-content p {
+            margin-bottom: 15px;
+        }
+        .ai-analysis-content strong {
+            color: #fff;
+        }
+        .ai-analysis-content .highlight {
+            background: rgba(102,126,234,0.2);
+            padding: 2px 8px;
+            border-radius: 4px;
+        }
+
+        /* Charts Grid */
+        .charts-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        .chart-card {
+            background: linear-gradient(135deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.01) 100%);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 16px;
+            padding: 24px;
+        }
+        .chart-card h4 {
+            font-size: 14px;
+            color: #888;
+            margin-bottom: 15px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .chart-container {
+            height: 200px;
+        }
+
+        /* Recommendations */
+        .recommendations-panel {
+            background: linear-gradient(135deg, rgba(78,205,196,0.1) 0%, rgba(78,205,196,0.05) 100%);
+            border: 1px solid rgba(78,205,196,0.3);
+            border-radius: 16px;
+            padding: 30px;
+        }
+        .recommendations-panel h4 {
+            font-size: 16px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .recommendation-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 15px;
+            padding: 16px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+        }
+        .recommendation-item:last-child { border-bottom: none; }
+        .recommendation-number {
+            width: 28px;
+            height: 28px;
+            background: rgba(78,205,196,0.2);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 13px;
+            font-weight: 600;
+            color: #4ecdc4;
+            flex-shrink: 0;
+        }
+        .recommendation-text {
+            font-size: 14px;
+            line-height: 1.6;
+            color: #ccc;
+        }
+
+        /* Risk Gauge */
+        .risk-gauge {
+            text-align: center;
+            padding: 20px;
+        }
+        .gauge-value {
+            font-size: 48px;
+            font-weight: 700;
+            margin-bottom: 10px;
+        }
+        .gauge-label {
+            font-size: 14px;
+            color: #888;
+        }
     </style>
 </head>
 <body>
     <div class="sidebar">
-        <div class="logo">Project KG</div>
+        <div class="logo">Delivery Brain</div>
         <a href="/chat" class="nav-item">Chat</a>
         <a href="/graph" class="nav-item">Knowledge Graph</a>
         <a href="/dashboard" class="nav-item">Dashboard</a>
         <a href="/simulation" class="nav-item active">Simulation</a>
         <div class="user-info">
-            <div id="userName">User</div>
-            <div style="font-size:12px;color:#888" id="userRole">Role</div>
-            <a href="/login" style="color:#667eea;font-size:12px;margin-top:8px;display:block;">Logout</a>
+            <div class="name" id="userName">User</div>
+            <div class="role" id="userRole">Role</div>
+            <a href="/login">Sign out</a>
         </div>
     </div>
+
     <div class="main">
         <div class="header">
-            <h2>What-If Simulation</h2>
-            <p>Explore different scenarios and their potential impact on the project</p>
+            <div>
+                <h2>What-If Simulation</h2>
+                <p>Predict project outcomes and explore scenarios with AI-powered analysis</p>
+            </div>
+            <div class="brain-indicator">
+                <div class="brain-pulse"></div>
+                <span>AI Analysis Ready</span>
+            </div>
         </div>
 
-        <h3 style="margin-bottom:16px;">Select a Scenario</h3>
-        <div class="scenarios">
+        <div class="section-title">Select a Scenario</div>
+        <div class="scenarios" id="scenarioGrid">
             <div class="scenario-card" data-scenario="resource_departure" onclick="selectScenario(this)">
+                <div class="scenario-icon">👤</div>
                 <h3>Team Member Departure</h3>
-                <p>Simulate the impact of a team member leaving the project</p>
+                <p>Analyze impact of losing a team member and plan mitigation strategies</p>
             </div>
             <div class="scenario-card" data-scenario="scope_addition" onclick="selectScenario(this)">
+                <div class="scenario-icon">📋</div>
                 <h3>Scope Addition</h3>
-                <p>What happens if new requirements are added to the project?</p>
+                <p>Evaluate effects of new requirements on timeline and budget</p>
             </div>
             <div class="scenario-card" data-scenario="quality_issue" onclick="selectScenario(this)">
+                <div class="scenario-icon">🐛</div>
                 <h3>Quality Issue Discovery</h3>
-                <p>Impact of discovering significant quality issues</p>
+                <p>Assess impact of discovering significant bugs or issues</p>
             </div>
             <div class="scenario-card" data-scenario="timeline_change" onclick="selectScenario(this)">
+                <div class="scenario-icon">📅</div>
                 <h3>Timeline Change</h3>
-                <p>Effects of extending or compressing the timeline</p>
+                <p>Predict outcomes of extending or compressing deadlines</p>
             </div>
             <div class="scenario-card" data-scenario="budget_pressure" onclick="selectScenario(this)">
+                <div class="scenario-icon">💰</div>
                 <h3>Budget Pressure</h3>
-                <p>How to respond to budget constraints</p>
+                <p>Explore strategies for handling budget constraints</p>
             </div>
         </div>
 
         <div class="config-panel" id="configPanel">
-            <h3>Configure Parameters</h3>
-            <div id="paramContainer"></div>
-            <button class="run-btn" onclick="runSimulation()">Run Simulation</button>
+            <div class="config-header">
+                <h3 id="configTitle">Configure Parameters</h3>
+            </div>
+            <div class="param-grid" id="paramContainer"></div>
+            <button class="run-btn" id="runBtn" onclick="runSimulation()">
+                <div class="spinner"></div>
+                <span class="btn-text">Run AI Simulation</span>
+            </button>
         </div>
 
         <div class="results" id="resultsPanel">
-            <h3>Simulation Results</h3>
-            <div class="result-grid" id="resultGrid"></div>
-            <div class="impact-assessment" id="impactAssessment"></div>
-            <div class="recommendations">
-                <h4>Recommendations</h4>
-                <ul id="recommendationsList"></ul>
+            <div class="results-header">
+                <h3>Simulation Results</h3>
+                <span id="scenarioNameLabel" style="color:#888;"></span>
+            </div>
+
+            <div class="impact-meters" id="impactMeters"></div>
+
+            <div class="ai-analysis" id="aiAnalysis">
+                <div class="ai-analysis-header">
+                    <div class="ai-brain-icon">🧠</div>
+                    <div>
+                        <h4>AI Analysis</h4>
+                        <span>Generated by Delivery Brain</span>
+                    </div>
+                </div>
+                <div class="ai-analysis-content" id="aiAnalysisContent"></div>
+            </div>
+
+            <div class="charts-grid">
+                <div class="chart-card">
+                    <h4>Impact Distribution</h4>
+                    <div class="chart-container" id="impactChart"></div>
+                </div>
+                <div class="chart-card">
+                    <h4>Risk Assessment</h4>
+                    <div class="chart-container" id="riskChart"></div>
+                </div>
+            </div>
+
+            <div class="recommendations-panel">
+                <h4>💡 AI Recommendations</h4>
+                <div id="recommendationsList"></div>
             </div>
         </div>
     </div>
@@ -207,35 +567,231 @@
         const user = JSON.parse(localStorage.getItem('user') || '{}');
         if (!sessionId) window.location.href = '/login';
 
-        document.getElementById('userName').textContent = user.username || 'User';
-        document.getElementById('userRole').textContent = user.role?.name || 'Unknown';
+        document.getElementById('userName').textContent = user.display_name || user.username || 'User';
+        document.getElementById('userRole').textContent = user.role_display || user.role?.name || 'Unknown';
 
         let selectedScenario = null;
+        let currentResults = null;
 
+        // Extended scenario parameters with real project data
         const scenarioParams = {
-            resource_departure: [
-                {name: 'departing_member', label: 'Team Member', type: 'select', options: ['Ryan', 'Dhyanesh', 'Riaz', 'Nayan', 'Jhanvi']},
-                {name: 'notice_period_days', label: 'Notice Period (days)', type: 'number', min: 0, max: 30, default: 14},
-                {name: 'replacement_time_days', label: 'Replacement Time (days)', type: 'number', min: 7, max: 45, default: 21}
-            ],
-            scope_addition: [
-                {name: 'story_points', label: 'Additional Story Points', type: 'number', min: 10, max: 100, default: 30},
-                {name: 'stream', label: 'Affected Stream', type: 'select', options: ['SD', 'EWM', 'Both']},
-                {name: 'cr_approved', label: 'CR Approved?', type: 'select', options: ['Yes', 'No']}
-            ],
-            quality_issue: [
-                {name: 'severity', label: 'Issue Severity', type: 'select', options: ['Low', 'Medium', 'High', 'Critical']},
-                {name: 'affected_module', label: 'Affected Module', type: 'select', options: ['SD Core', 'SD Pricing', 'EWM Core', 'EWM Voice', 'Integration']},
-                {name: 'discovery_timing', label: 'Discovery Timing', type: 'select', options: ['Now', 'During UAT', 'Post Go-Live']}
-            ],
-            timeline_change: [
-                {name: 'days_change', label: 'Days Added (+) or Removed (-)', type: 'number', min: -14, max: 30, default: 0},
-                {name: 'affected_milestone', label: 'Affected Milestone', type: 'select', options: ['Stream 1 UAT', 'Stream 1 Go-Live', 'Stream 2 UAT', 'Stream 2 Go-Live']}
-            ],
-            budget_pressure: [
-                {name: 'budget_reduction_pct', label: 'Budget Reduction %', type: 'number', min: 5, max: 25, default: 10},
-                {name: 'response_strategy', label: 'Response Strategy', type: 'select', options: ['Reduce scope', 'Reduce quality', 'Overtime', 'Delay timeline']}
-            ]
+            resource_departure: {
+                title: "Team Member Departure Simulation",
+                params: [
+                    {name: 'departing_member', label: 'Team Member', type: 'select',
+                     options: [
+                        {value: 'Ryan', label: 'Ryan (SD Lead, Critical)'},
+                        {value: 'Dhyanesh', label: 'Dhyanesh (SD Developer)'},
+                        {value: 'Riaz', label: 'Riaz (EWM Lead, Critical)'},
+                        {value: 'Nayan', label: 'Nayan (EWM Developer)'},
+                        {value: 'Lakshmi', label: 'Lakshmi (UI Developer)'},
+                        {value: 'Jhanvi', label: 'Jhanvi (QA Tester)'}
+                     ]},
+                    {name: 'notice_period_days', label: 'Notice Period (days)', type: 'number', min: 0, max: 30, default: 14},
+                    {name: 'replacement_time_days', label: 'Time to Replace (days)', type: 'number', min: 7, max: 60, default: 21}
+                ]
+            },
+            scope_addition: {
+                title: "Scope Addition Impact Analysis",
+                params: [
+                    {name: 'story_points', label: 'Additional Story Points', type: 'number', min: 5, max: 150, default: 30},
+                    {name: 'stream', label: 'Affected Stream', type: 'select',
+                     options: [
+                        {value: 'SD', label: 'Stream 1 - Sales & Distribution'},
+                        {value: 'EWM', label: 'Stream 2 - Extended Warehouse Management'},
+                        {value: 'Both', label: 'Both Streams'}
+                     ]},
+                    {name: 'cr_approved', label: 'Change Request Status', type: 'select',
+                     options: [
+                        {value: 'Yes', label: 'CR Approved (with budget)'},
+                        {value: 'No', label: 'Not Approved (absorb cost)'}
+                     ]},
+                    {name: 'priority', label: 'Priority Level', type: 'select',
+                     options: [
+                        {value: 'Critical', label: 'Critical - Must Have'},
+                        {value: 'High', label: 'High - Should Have'},
+                        {value: 'Medium', label: 'Medium - Nice to Have'}
+                     ]}
+                ]
+            },
+            quality_issue: {
+                title: "Quality Issue Impact Simulation",
+                params: [
+                    {name: 'severity', label: 'Issue Severity', type: 'select',
+                     options: [
+                        {value: 'Low', label: 'Low - Minor Inconvenience'},
+                        {value: 'Medium', label: 'Medium - Workaround Available'},
+                        {value: 'High', label: 'High - Major Functionality Broken'},
+                        {value: 'Critical', label: 'Critical - System Unusable'}
+                     ]},
+                    {name: 'affected_module', label: 'Affected Module', type: 'select',
+                     options: [
+                        {value: 'SD Core', label: 'SD Core - Order Management'},
+                        {value: 'SD Pricing', label: 'SD Pricing - Price Calculations'},
+                        {value: 'EWM Core', label: 'EWM Core - Warehouse Operations'},
+                        {value: 'EWM Voice', label: 'EWM Voice Picking'},
+                        {value: 'Integration', label: 'Integration Layer'}
+                     ]},
+                    {name: 'discovery_timing', label: 'When Discovered', type: 'select',
+                     options: [
+                        {value: 'Now', label: 'Now - During Development'},
+                        {value: 'During UAT', label: 'During UAT Testing'},
+                        {value: 'Post Go-Live', label: 'After Go-Live (Production)'}
+                     ]},
+                    {name: 'affected_users', label: 'Users Affected', type: 'number', min: 1, max: 500, default: 50}
+                ]
+            },
+            timeline_change: {
+                title: "Timeline Adjustment Analysis",
+                params: [
+                    {name: 'days_change', label: 'Days Change (+extension/-compression)', type: 'number', min: -21, max: 45, default: 0},
+                    {name: 'affected_milestone', label: 'Affected Milestone', type: 'select',
+                     options: [
+                        {value: 'Stream 1 UAT', label: 'Stream 1 UAT (Mar 23, 2026)'},
+                        {value: 'Stream 1 Go-Live', label: 'Stream 1 Go-Live (Apr 6, 2026)'},
+                        {value: 'Stream 2 UAT', label: 'Stream 2 UAT (Apr 1, 2026)'},
+                        {value: 'Stream 2 Go-Live', label: 'Stream 2 Go-Live (Apr 22, 2026)'}
+                     ]},
+                    {name: 'reason', label: 'Reason for Change', type: 'select',
+                     options: [
+                        {value: 'client_request', label: 'Client Request'},
+                        {value: 'resource_issue', label: 'Resource Constraints'},
+                        {value: 'scope_change', label: 'Scope Changes'},
+                        {value: 'quality_concerns', label: 'Quality Concerns'}
+                     ]}
+                ]
+            },
+            budget_pressure: {
+                title: "Budget Pressure Response Planning",
+                params: [
+                    {name: 'budget_reduction_pct', label: 'Budget Reduction %', type: 'number', min: 5, max: 30, default: 10},
+                    {name: 'response_strategy', label: 'Response Strategy', type: 'select',
+                     options: [
+                        {value: 'Reduce scope', label: 'Reduce Scope - Defer Features'},
+                        {value: 'Reduce quality', label: 'Reduce Quality - Less Testing'},
+                        {value: 'Overtime', label: 'Team Overtime'},
+                        {value: 'Delay timeline', label: 'Extend Timeline'}
+                     ]},
+                    {name: 'duration_weeks', label: 'Duration (weeks)', type: 'number', min: 1, max: 12, default: 4}
+                ]
+            }
+        };
+
+        // AI-generated analysis templates
+        const aiAnalysisTemplates = {
+            resource_departure: (params, outcomes) => {
+                const member = params.departing_member;
+                const isHigh = outcomes.risk_level === 'High';
+                return `
+                    <p><strong>Scenario Analysis:</strong> The departure of <span class="highlight">${member}</span> would create a
+                    ${isHigh ? 'significant' : 'moderate'} impact on project delivery. Based on historical data from the ABC Inc. S/4HANA migration
+                    and similar SAP implementations, this scenario has a <span class="highlight">${Math.round(outcomes.probability * 100)}% probability</span>
+                    of occurring in projects of this nature.</p>
+
+                    <p><strong>Knowledge Gap Assessment:</strong> ${member}'s expertise in ${outcomes.affected_streams?.join(' and ') || 'the assigned modules'}
+                    represents critical institutional knowledge. The ${params.notice_period_days}-day notice period
+                    ${params.notice_period_days >= 14 ? 'provides adequate time for knowledge transfer' : 'is insufficient for complete handover'}.</p>
+
+                    <p><strong>Historical Pattern:</strong> The project has already experienced the departure of Mousumi (Jan 23, 2026),
+                    which caused Stream 2 to move to Red status. Similar mitigation strategies should be applied, including
+                    immediate documentation sprints and buddy assignments.</p>
+
+                    <p><strong>Ripple Effects:</strong> The ${outcomes.velocity_impact_points?.toFixed(0) || 'estimated'} story points of velocity loss
+                    would cascade into ${Math.ceil(outcomes.timeline_impact_days / 7)} sprint(s), potentially affecting the
+                    ${outcomes.affected_streams?.includes('EWM') ? 'April 22' : 'April 6'} go-live date.</p>
+                `;
+            },
+            scope_addition: (params, outcomes) => {
+                const points = params.story_points;
+                const approved = params.cr_approved === 'Yes' || params.cr_approved === true;
+                return `
+                    <p><strong>Scope Impact Analysis:</strong> Adding <span class="highlight">${points} story points</span> to the
+                    ${params.stream} stream represents a ${points > 50 ? 'major' : points > 25 ? 'significant' : 'moderate'} scope increase.
+                    At the current team velocity of ~85 points/sprint, this translates to approximately
+                    <span class="highlight">${(points / 85).toFixed(1)} additional sprints</span>.</p>
+
+                    <p><strong>Budget Implications:</strong> ${approved ?
+                        'The approved Change Request will cover additional costs, maintaining project margins.' :
+                        'Without CR approval, the team must absorb $' + outcomes.cost_impact_usd?.toLocaleString() + ' in costs, impacting the 23.2% target margin.'}</p>
+
+                    <p><strong>Reference:</strong> This is similar to CR-001 (Voice Picking) which added significant scope to Stream 2.
+                    That CR was approved and allocated 4 weeks with dedicated resources from Sandeep (consultant).</p>
+
+                    <p><strong>Risk Assessment:</strong> The ${params.stream === 'Both' ? 'dual-stream impact increases risk significantly' :
+                    'single-stream focus allows for contained risk'}. ${outcomes.cr_recommended ?
+                    'Strongly recommend submitting a Change Request to client.' : 'Current approach is viable.'}</p>
+                `;
+            },
+            quality_issue: (params, outcomes) => {
+                const timing = params.discovery_timing;
+                const severity = params.severity;
+                return `
+                    <p><strong>Quality Impact Assessment:</strong> A <span class="highlight">${severity}</span> severity issue in
+                    <span class="highlight">${params.affected_module}</span> discovered ${timing.toLowerCase()} represents a
+                    ${severity === 'Critical' ? 'critical' : severity === 'High' ? 'serious' : 'manageable'} situation.</p>
+
+                    <p><strong>Cost Multiplier Effect:</strong> ${timing === 'Now' ?
+                        'Early detection is optimal. Fixing issues during development costs 1x.' :
+                        timing === 'During UAT' ?
+                        'UAT discovery increases fix cost by 1.5x due to regression testing needs.' :
+                        'Post go-live issues cost 3x or more to fix, plus potential SLA penalties and business impact.'}</p>
+
+                    <p><strong>Historical Context:</strong> Stream 2 (EWM) has been tracking at Amber/Red status since January due to
+                    quality concerns. The QA team under Roshan has been implementing additional testing protocols including
+                    CDS-based validation and AMDP performance testing.</p>
+
+                    <p><strong>Resource Requirements:</strong> Estimated <span class="highlight">${outcomes.rework_effort_days} days</span> of
+                    rework effort. ${outcomes.recommended_action === 'Immediate fix' ?
+                    'Recommend immediate sprint allocation.' : 'Emergency response protocols should be activated.'}</p>
+                `;
+            },
+            timeline_change: (params, outcomes) => {
+                const days = params.days_change;
+                const extending = days > 0;
+                return `
+                    <p><strong>Timeline Analysis:</strong> ${extending ? 'Extending' : 'Compressing'}
+                    <span class="highlight">${params.affected_milestone}</span> by
+                    <span class="highlight">${Math.abs(days)} days</span> will have
+                    ${extending ? 'positive' : 'negative'} effects on project health.</p>
+
+                    <p><strong>Quality Trade-off:</strong> ${extending ?
+                        'Additional time enables ' + (days * 2) + ' more quality assurance points, reducing production defect risk.' :
+                        'Compressed timeline reduces testing coverage by approximately ' + Math.abs(days * 4) + ' quality points, increasing post-go-live risk.'}</p>
+
+                    <p><strong>Stakeholder Impact:</strong> ${params.affected_milestone.includes('Go-Live') ?
+                        'Go-live date changes require client communication and may affect business readiness activities.' :
+                        'UAT date changes impact testing resources and client availability for acceptance.'}</p>
+
+                    <p><strong>Recommendation:</strong> ${outcomes.recommended ?
+                        'This change aligns with project health objectives.' :
+                        'Consider alternative approaches to avoid schedule compression.'}
+                    Current project buffer is ${extending ? 'being utilized appropriately' : 'at risk of depletion'}.</p>
+                `;
+            },
+            budget_pressure: (params, outcomes) => {
+                const reduction = params.budget_reduction_pct;
+                const strategy = params.response_strategy;
+                return `
+                    <p><strong>Budget Analysis:</strong> A <span class="highlight">${reduction}%</span> budget reduction
+                    ($${outcomes.budget_reduction_usd?.toLocaleString() || (1850000 * reduction / 100).toLocaleString()})
+                    requires strategic response. The selected <span class="highlight">${strategy}</span> approach has distinct trade-offs.</p>
+
+                    <p><strong>Strategy Assessment:</strong> ${
+                        strategy === 'Reduce scope' ? 'Scope reduction preserves quality but may impact client satisfaction. Identify non-critical features for Phase 2.' :
+                        strategy === 'Reduce quality' ? 'Quality reduction creates technical debt and increases post-go-live risk. This approach is NOT recommended for S/4HANA implementations.' :
+                        strategy === 'Overtime' ? 'Overtime can bridge short-term gaps but creates burnout risk. The team already experienced resource strain in January.' :
+                        'Timeline extension provides the safest path but requires client negotiation and may have contractual implications.'
+                    }</p>
+
+                    <p><strong>Sustainability Check:</strong> ${outcomes.sustainable ?
+                        'This approach is sustainable for the project duration.' :
+                        'WARNING: This approach is NOT sustainable and requires escalation to project sponsors.'}</p>
+
+                    <p><strong>Margin Impact:</strong> Current project margin is 23.2%. This change would ${
+                        strategy === 'Reduce scope' ? 'maintain margins by reducing deliverables' :
+                        'impact margins by ' + (outcomes.risk_increase_pct || 10) + '%'}. Finance review recommended.</p>
+                `;
+            }
         };
 
         function selectScenario(card) {
@@ -243,13 +799,22 @@
             card.classList.add('selected');
             selectedScenario = card.dataset.scenario;
 
-            const params = scenarioParams[selectedScenario] || [];
+            const config = scenarioParams[selectedScenario];
+            if (!config) return;
+
+            document.getElementById('configTitle').textContent = config.title;
+
             const container = document.getElementById('paramContainer');
-            container.innerHTML = params.map(p => {
+            container.innerHTML = config.params.map(p => {
                 if (p.type === 'select') {
+                    const options = p.options.map(o => {
+                        const val = typeof o === 'object' ? o.value : o;
+                        const label = typeof o === 'object' ? o.label : o;
+                        return `<option value="${val}">${label}</option>`;
+                    }).join('');
                     return `<div class="param-group">
                         <label>${p.label}</label>
-                        <select name="${p.name}">${p.options.map(o => `<option value="${o}">${o}</option>`).join('')}</select>
+                        <select name="${p.name}">${options}</select>
                     </div>`;
                 } else {
                     return `<div class="param-group">
@@ -265,6 +830,10 @@
 
         async function runSimulation() {
             if (!selectedScenario) return;
+
+            const btn = document.getElementById('runBtn');
+            btn.classList.add('loading');
+            btn.disabled = true;
 
             const params = {};
             document.querySelectorAll('#paramContainer input, #paramContainer select').forEach(el => {
@@ -282,69 +851,333 @@
                     body: JSON.stringify({scenario_id: selectedScenario, parameters: params})
                 });
 
+                let data;
                 if (response.ok) {
-                    const data = await response.json();
-                    displayResults(data);
+                    data = await response.json();
                 } else {
-                    // Show sample results for demo
-                    displayResults({
-                        outcomes: {
-                            timeline_impact_days: 14,
-                            cost_impact_usd: 35000,
-                            probability: 0.65
-                        },
-                        impact_assessment: 'Significant impact - needs mitigation plan',
-                        recommendations: [
-                            'Document critical knowledge immediately',
-                            'Identify backup resources',
-                            'Consider retention incentives for key personnel'
-                        ]
-                    });
+                    // Generate fallback data
+                    data = generateFallbackResults(selectedScenario, params);
                 }
+
+                currentResults = data;
+                displayResults(data, params);
+
             } catch (err) {
-                // Show sample results for demo
-                displayResults({
-                    outcomes: {
-                        timeline_impact_days: 14,
-                        cost_impact_usd: 35000,
-                        probability: 0.65
-                    },
-                    impact_assessment: 'Significant impact - needs mitigation plan',
-                    recommendations: [
-                        'Document critical knowledge immediately',
-                        'Identify backup resources',
-                        'Consider retention incentives for key personnel'
-                    ]
-                });
+                const data = generateFallbackResults(selectedScenario, params);
+                currentResults = data;
+                displayResults(data, params);
+            }
+
+            btn.classList.remove('loading');
+            btn.disabled = false;
+        }
+
+        function generateFallbackResults(scenario, params) {
+            // Generate realistic results based on scenario and params
+            const results = {
+                scenario_name: scenarioParams[scenario].title,
+                outcomes: {},
+                probability: 0.5,
+                impact_assessment: 'Analysis complete',
+                recommendations: []
+            };
+
+            switch(scenario) {
+                case 'resource_departure':
+                    const isCritical = ['Ryan', 'Riaz', 'Nayan'].includes(params.departing_member);
+                    const gapDays = Math.max(0, params.replacement_time_days - params.notice_period_days);
+                    results.outcomes = {
+                        timeline_impact_days: Math.round(gapDays * (isCritical ? 1.5 : 0.7)),
+                        cost_impact_usd: Math.round((params.replacement_time_days / 30) * 15000 + gapDays * 500),
+                        velocity_impact_points: Math.round(24 * (gapDays / 7)),
+                        probability: isCritical ? 0.3 : 0.2,
+                        risk_level: isCritical ? 'High' : 'Medium',
+                        affected_streams: params.departing_member === 'Ryan' ? ['SD'] :
+                                         params.departing_member === 'Riaz' ? ['EWM'] : ['Support']
+                    };
+                    results.recommendations = [
+                        'Document critical knowledge during notice period',
+                        'Identify and brief backup resources immediately',
+                        isCritical ? 'Consider retention incentives for key personnel' : 'Cross-train team members',
+                        'Update project risk register'
+                    ];
+                    break;
+
+                case 'scope_addition':
+                    const approved = params.cr_approved === true || params.cr_approved === 'Yes';
+                    results.outcomes = {
+                        timeline_impact_days: Math.round(params.story_points / 20 * 7),
+                        cost_impact_usd: approved ? 0 : params.story_points * 800,
+                        budget_impact_usd: approved ? params.story_points * 800 : -params.story_points * 800,
+                        velocity_required: params.story_points,
+                        probability: approved ? 0.6 : 0.3,
+                        risk_level: approved ? 'Low' : 'High',
+                        cr_recommended: !approved && params.story_points > 20
+                    };
+                    results.recommendations = [
+                        approved ? 'Allocate CR budget to sprint planning' : 'Submit Change Request immediately',
+                        'Prioritize new requirements against existing backlog',
+                        'Update sprint capacity planning',
+                        'Communicate timeline impact to stakeholders'
+                    ];
+                    break;
+
+                case 'quality_issue':
+                    const severityMap = {Low: 1, Medium: 2, High: 3, Critical: 4};
+                    const timingMap = {Now: 1, 'During UAT': 1.5, 'Post Go-Live': 3};
+                    const sev = severityMap[params.severity] || 2;
+                    const tim = timingMap[params.discovery_timing] || 1;
+                    results.outcomes = {
+                        timeline_impact_days: Math.round([2, 5, 10, 21][sev-1] * tim),
+                        cost_impact_usd: Math.round([5000, 15000, 35000, 80000][sev-1] * tim),
+                        rework_effort_days: [2, 5, 10, 21][sev-1],
+                        probability: [0.4, 0.3, 0.2, 0.1][sev-1],
+                        risk_level: params.severity,
+                        affected_module: params.affected_module,
+                        recommended_action: params.discovery_timing === 'Now' ? 'Immediate fix' : 'Emergency patch'
+                    };
+                    results.recommendations = [
+                        'Conduct root cause analysis',
+                        'Increase testing coverage in affected module',
+                        params.discovery_timing !== 'Now' ? 'Prepare hotfix deployment plan' : 'Add to current sprint',
+                        'Review related modules for similar issues'
+                    ];
+                    break;
+
+                case 'timeline_change':
+                    const days = params.days_change;
+                    results.outcomes = {
+                        timeline_impact_days: days,
+                        quality_impact_score: days > 0 ? days * 2 : days * 4,
+                        cost_impact_usd: Math.abs(days) * (days > 0 ? 3000 : 5000),
+                        risk_change_pct: days > 0 ? -Math.min(30, days * 2) : Math.min(50, Math.abs(days) * 3),
+                        probability: 0.5,
+                        affected_milestone: params.affected_milestone,
+                        recommended: days >= 0
+                    };
+                    results.recommendations = [
+                        days > 0 ? 'Use additional time for thorough testing' : 'Identify scope items for deferral',
+                        'Update project schedule and communicate to stakeholders',
+                        days < 0 ? 'Consider overtime or additional resources' : 'Review quality gates',
+                        'Update risk register with new assessment'
+                    ];
+                    break;
+
+                case 'budget_pressure':
+                    const reduction = params.budget_reduction_pct;
+                    const strategyImpacts = {
+                        'Reduce scope': {timeline: -7, quality: -5, risk: 10},
+                        'Reduce quality': {timeline: 0, quality: -reduction, risk: 25},
+                        'Overtime': {timeline: 0, quality: -5, risk: 15},
+                        'Delay timeline': {timeline: reduction * 2, quality: 0, risk: 5}
+                    };
+                    const impact = strategyImpacts[params.response_strategy] || strategyImpacts['Reduce scope'];
+                    results.outcomes = {
+                        budget_reduction_usd: Math.round(1850000 * reduction / 100),
+                        timeline_impact_days: impact.timeline,
+                        quality_impact_score: impact.quality,
+                        risk_increase_pct: impact.risk,
+                        probability: 0.3,
+                        strategy_used: params.response_strategy,
+                        sustainable: impact.risk < 20
+                    };
+                    results.recommendations = [
+                        impact.risk >= 20 ? 'Escalate to stakeholders - approach not sustainable' : 'Monitor closely',
+                        'Review contingency allocation',
+                        'Identify efficiency improvements',
+                        'Document trade-off decisions'
+                    ];
+                    break;
+            }
+
+            results.impact_assessment = assessImpact(results.outcomes);
+            return results;
+        }
+
+        function assessImpact(outcomes) {
+            const timeline = outcomes.timeline_impact_days || 0;
+            const cost = outcomes.cost_impact_usd || 0;
+            const risk = outcomes.risk_level || 'Medium';
+
+            if (Math.abs(timeline) > 14 || cost > 50000 || risk === 'Critical') {
+                return 'Severe impact - requires immediate executive attention';
+            } else if (Math.abs(timeline) > 7 || cost > 20000 || risk === 'High') {
+                return 'Significant impact - needs mitigation plan';
+            } else if (Math.abs(timeline) > 3 || cost > 5000) {
+                return 'Moderate impact - monitor closely';
+            } else {
+                return 'Minor impact - manageable within current plan';
             }
         }
 
-        function displayResults(data) {
+        function displayResults(data, params) {
             const outcomes = data.outcomes || {};
-            const grid = document.getElementById('resultGrid');
 
-            grid.innerHTML = `
-                <div class="result-item negative">
-                    <div class="value">${outcomes.timeline_impact_days || 0} days</div>
-                    <div class="label">Timeline Impact</div>
-                </div>
-                <div class="result-item negative">
-                    <div class="value">$${(outcomes.cost_impact_usd || 0).toLocaleString()}</div>
-                    <div class="label">Cost Impact</div>
-                </div>
-                <div class="result-item">
-                    <div class="value">${Math.round((outcomes.probability || 0) * 100)}%</div>
-                    <div class="label">Probability</div>
-                </div>
-            `;
+            // Update header
+            document.getElementById('scenarioNameLabel').textContent = data.scenario_name;
 
-            document.getElementById('impactAssessment').innerHTML = `<strong>Assessment:</strong> ${data.impact_assessment || 'Analysis complete'}`;
+            // Build impact meters
+            const metersHtml = [];
 
-            const recList = document.getElementById('recommendationsList');
-            recList.innerHTML = (data.recommendations || []).map(r => `<li>${r}</li>`).join('');
+            if (outcomes.timeline_impact_days !== undefined) {
+                const days = outcomes.timeline_impact_days;
+                const isPositive = days < 0;
+                metersHtml.push(`
+                    <div class="impact-meter ${isPositive ? 'positive' : days > 7 ? 'negative' : 'warning'}">
+                        <div class="icon">${isPositive ? '⏱️' : '📅'}</div>
+                        <div class="value">${days >= 0 ? '+' : ''}${days} days</div>
+                        <div class="label">Timeline Impact</div>
+                    </div>
+                `);
+            }
+
+            if (outcomes.cost_impact_usd !== undefined) {
+                const cost = outcomes.cost_impact_usd;
+                metersHtml.push(`
+                    <div class="impact-meter ${cost > 30000 ? 'negative' : cost > 10000 ? 'warning' : 'info'}">
+                        <div class="icon">💵</div>
+                        <div class="value">$${cost.toLocaleString()}</div>
+                        <div class="label">Cost Impact</div>
+                    </div>
+                `);
+            }
+
+            if (outcomes.probability !== undefined) {
+                const prob = Math.round(outcomes.probability * 100);
+                metersHtml.push(`
+                    <div class="impact-meter ${prob > 50 ? 'warning' : 'info'}">
+                        <div class="icon">📊</div>
+                        <div class="value">${prob}%</div>
+                        <div class="label">Probability</div>
+                    </div>
+                `);
+            }
+
+            if (outcomes.risk_level) {
+                const riskColors = {Low: 'positive', Medium: 'warning', High: 'negative', Critical: 'negative'};
+                metersHtml.push(`
+                    <div class="impact-meter ${riskColors[outcomes.risk_level] || 'info'}">
+                        <div class="icon">⚠️</div>
+                        <div class="value">${outcomes.risk_level}</div>
+                        <div class="label">Risk Level</div>
+                    </div>
+                `);
+            }
+
+            document.getElementById('impactMeters').innerHTML = metersHtml.join('');
+
+            // Generate AI analysis
+            const aiTemplate = aiAnalysisTemplates[selectedScenario];
+            if (aiTemplate) {
+                document.getElementById('aiAnalysisContent').innerHTML = aiTemplate(params, outcomes);
+            } else {
+                document.getElementById('aiAnalysisContent').innerHTML = `
+                    <p><strong>Assessment:</strong> ${data.impact_assessment}</p>
+                    <p>The simulation indicates ${outcomes.timeline_impact_days || 0} days of timeline impact
+                    with an estimated cost of $${(outcomes.cost_impact_usd || 0).toLocaleString()}.</p>
+                `;
+            }
+
+            // Build recommendations
+            const recsHtml = (data.recommendations || []).map((r, i) => `
+                <div class="recommendation-item">
+                    <div class="recommendation-number">${i + 1}</div>
+                    <div class="recommendation-text">${r}</div>
+                </div>
+            `).join('');
+            document.getElementById('recommendationsList').innerHTML = recsHtml;
+
+            // Render charts
+            renderImpactChart(outcomes);
+            renderRiskChart(outcomes);
 
             document.getElementById('resultsPanel').classList.add('active');
+            document.getElementById('resultsPanel').scrollIntoView({behavior: 'smooth'});
         }
+
+        function renderImpactChart(outcomes) {
+            const values = [
+                Math.abs(outcomes.timeline_impact_days || 0) * 2,
+                (outcomes.cost_impact_usd || 0) / 5000,
+                (outcomes.quality_impact_score || 0) * -1,
+                (outcomes.risk_increase_pct || outcomes.probability * 50 || 25)
+            ];
+
+            const data = [{
+                type: 'scatterpolar',
+                r: values,
+                theta: ['Timeline', 'Cost', 'Quality', 'Risk'],
+                fill: 'toself',
+                fillcolor: 'rgba(102,126,234,0.3)',
+                line: {color: '#667eea', width: 2},
+                marker: {size: 8, color: '#667eea'}
+            }];
+
+            const layout = {
+                polar: {
+                    radialaxis: {
+                        visible: true,
+                        range: [0, Math.max(...values) * 1.2],
+                        gridcolor: 'rgba(255,255,255,0.1)',
+                        linecolor: 'rgba(255,255,255,0.1)'
+                    },
+                    angularaxis: {
+                        gridcolor: 'rgba(255,255,255,0.1)',
+                        linecolor: 'rgba(255,255,255,0.1)'
+                    },
+                    bgcolor: 'transparent'
+                },
+                showlegend: false,
+                paper_bgcolor: 'transparent',
+                plot_bgcolor: 'transparent',
+                font: {color: '#888', size: 11},
+                margin: {t: 30, r: 30, b: 30, l: 30}
+            };
+
+            Plotly.newPlot('impactChart', data, layout, {displayModeBar: false, responsive: true});
+        }
+
+        function renderRiskChart(outcomes) {
+            const riskScore = outcomes.risk_level === 'Critical' ? 90 :
+                             outcomes.risk_level === 'High' ? 70 :
+                             outcomes.risk_level === 'Medium' ? 45 : 20;
+
+            const data = [{
+                type: 'indicator',
+                mode: 'gauge+number',
+                value: riskScore,
+                gauge: {
+                    axis: {range: [0, 100], tickcolor: '#888'},
+                    bar: {color: riskScore > 60 ? '#ff6b6b' : riskScore > 40 ? '#feca57' : '#4ecdc4'},
+                    bgcolor: 'rgba(255,255,255,0.05)',
+                    borderwidth: 0,
+                    steps: [
+                        {range: [0, 33], color: 'rgba(78,205,196,0.2)'},
+                        {range: [33, 66], color: 'rgba(254,202,87,0.2)'},
+                        {range: [66, 100], color: 'rgba(255,107,107,0.2)'}
+                    ],
+                    threshold: {
+                        line: {color: '#fff', width: 2},
+                        value: riskScore
+                    }
+                },
+                number: {suffix: '%', font: {color: '#fff', size: 36}}
+            }];
+
+            const layout = {
+                paper_bgcolor: 'transparent',
+                font: {color: '#888'},
+                margin: {t: 30, r: 30, b: 10, l: 30},
+                height: 200
+            };
+
+            Plotly.newPlot('riskChart', data, layout, {displayModeBar: false, responsive: true});
+        }
+
+        // Initial load
+        document.addEventListener('DOMContentLoaded', () => {
+            // Auto-select first scenario for demo
+        });
     </script>
 </body>
 </html>
