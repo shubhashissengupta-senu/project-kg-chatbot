@@ -6,6 +6,7 @@ A Knowledge Graph-based Project Intelligence Chatbot with Role-Based Access Cont
 
 - **Temporal Knowledge Graph**: 349 nodes, 471 edges with 26 temporal snapshots for time-travel queries
 - **Natural Language Chat**: Ask questions about project status, risks, team, and metrics
+- **Lite RAG Engine**: TF-IDF based retrieval for ad-hoc queries (41 documents, 1055 chunks)
 - **Role-Based Access Control**: Four user roles with different permission levels
 - **Interactive Visualizations**:
   - Knowledge Graph with D3.js (supports time travel)
@@ -24,6 +25,7 @@ project-kg-chatbot/
 │   ├── inference/     # Query engine & risk predictor
 │   ├── ingestion/     # Document parsers
 │   ├── knowledge_graph/  # Graph builder & storage
+│   ├── rag/           # Lite RAG engine (TF-IDF retrieval)
 │   ├── simulation/    # Forecaster & scenario simulator
 │   └── time_series/   # Metrics store & trend analyzer
 ├── ui/templates/      # HTML templates (Jinja2)
@@ -110,13 +112,17 @@ python -m uvicorn app:app --host 127.0.0.1 --port 8888
 
 ## Example Chat Queries
 
+**Structured Queries (Knowledge Graph):**
 - "What is the project status?"
 - "What are the main risks?"
 - "Who left the project?"
 - "How is Stream 2 doing?"
-- "What is the budget status?"
+
+**Ad-hoc Queries (RAG):**
+- "How were Stream 2 risks mitigated?"
+- "Why did Mousumi leave and what was the impact?"
+- "What is the voice picking feature and who is working on it?"
 - "Compare quality metrics between December and February"
-- "What happened when Mousumi left?"
 
 ## API Endpoints
 
