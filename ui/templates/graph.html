@@ -148,12 +148,6 @@
                 <label>Filter by Type</label>
                 <select id="typeFilter">
                     <option value="all">All Types</option>
-                    <option value="Person">People</option>
-                    <option value="Stream">Streams</option>
-                    <option value="Risk">Risks</option>
-                    <option value="Milestone">Milestones</option>
-                    <option value="ChangeRequest">Change Requests</option>
-                    <option value="Task">Tasks</option>
                 </select>
             </div>
         </div>
@@ -230,6 +224,7 @@
                 document.getElementById('snapshotLabel').textContent = data.current_label;
                 document.getElementById('loading').style.display = 'none';
 
+                populateTypeFilter(data.nodes || []);
                 renderGraph(data);
                 updateTimeLabel();
             } catch (err) {
@@ -253,6 +248,30 @@
             }
         }
 
+        function populateTypeFilter(nodes) {
+            const select = document.getElementById('typeFilter');
+            const currentValue = select.value;
+
+            // Get unique types and sort them
+            const types = [...new Set(nodes.map(n => n.type))].sort();
+
+            // Clear existing options except "All Types"
+            select.innerHTML = '<option value="all">All Types</option>';
+
+            // Add options for each type
+            types.forEach(type => {
+                const option = document.createElement('option');
+                option.value = type;
+                option.textContent = type;
+                select.appendChild(option);
+            });
+
+            // Restore previous selection if still valid
+            if (types.includes(currentValue)) {
+                select.value = currentValue;
+            }
+        }
+
         function renderGraph(data) {
             g.selectAll('*').remove();
 
@@ -264,7 +283,12 @@
             if (typeFilter !== 'all') {
                 const nodeIds = new Set(nodes.filter(n => n.type === typeFilter).map(n => n.id));
                 nodes = nodes.filter(n => n.type === typeFilter);
-                links = links.filter(l => nodeIds.has(l.source) || nodeIds.has(l.target));
+                // Only keep links where BOTH source and target are in filtered nodes
+                links = links.filter(l => {
+                    const sourceId = typeof l.source === 'object' ? l.source.id : l.source;
+                    const targetId = typeof l.target === 'object' ? l.target.id : l.target;
+                    return nodeIds.has(sourceId) && nodeIds.has(targetId);
+                });
             }
 
             // Limit nodes for performance
