@@ -47,6 +47,7 @@ async def lifespan(app: FastAPI):
     from src.simulation.forecaster import ProjectForecaster
     from src.simulation.scenario_simulator import ScenarioSimulator
     from src.auth.roles import RoleManager
+    from src.rag.rag_engine import RAGEngine
 
     # Create role manager
     app.state.role_manager = RoleManager()
@@ -103,8 +104,14 @@ async def lifespan(app: FastAPI):
     forecaster = ProjectForecaster(metrics_store, query_engine)
     simulator = ScenarioSimulator(query_engine, metrics_store)
 
-    # Create chat engine
-    chat_engine = ChatEngine(query_engine, risk_predictor, metrics_store)
+    # Create RAG engine for ad-hoc queries
+    rag_engine = RAGEngine()
+    if data_dir:
+        doc_count = rag_engine.initialize(data_dir)
+        logger.info(f"RAG engine initialized with {doc_count} documents, {rag_engine.store.stats()['total_chunks']} chunks")
+
+    # Create chat engine with RAG support
+    chat_engine = ChatEngine(query_engine, risk_predictor, metrics_store, rag_engine=rag_engine)
 
     # Store in app state
     app.state.pipeline = pipeline

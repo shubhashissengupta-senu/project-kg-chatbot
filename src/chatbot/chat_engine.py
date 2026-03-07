@@ -13,6 +13,7 @@ from ..inference.query_engine import TemporalQueryEngine
 from ..inference.risk_predictor import RiskPredictor
 from ..time_series.metrics_store import TimeSeriesMetricsStore
 from ..time_series.trend_analyzer import TrendAnalyzer
+from ..rag.rag_engine import RAGEngine
 
 logger = logging.getLogger(__name__)
 
@@ -98,11 +99,13 @@ class ChatEngine:
                  query_engine: TemporalQueryEngine,
                  risk_predictor: RiskPredictor,
                  metrics_store: TimeSeriesMetricsStore,
+                 rag_engine: RAGEngine = None,
                  llm_client: Any = None):
         self.query_engine = query_engine
         self.risk_predictor = risk_predictor
         self.metrics = metrics_store
         self.trend_analyzer = TrendAnalyzer(metrics_store)
+        self.rag_engine = rag_engine
         self.llm = llm_client
 
         self.query_planner = QueryPlanner()
@@ -136,6 +139,20 @@ class ChatEngine:
             # Step 3: Generate response
             response = self._generate_response(user_message, plan, results)
 
+            # Step 4: If response is poor and RAG is available, try RAG
+            if self.rag_engine and self._should_use_rag(response):
+                logger.info("Falling back to RAG for better response")
+                rag_response = self._query_rag(user_message)
+                if rag_response and rag_response.confidence > response.confidence:
+                    response = ChatResponse(
+                        answer=rag_response.answer,
+                        sources=rag_response.sources,
+                        data={"rag_used": True},
+                        follow_up_questions=self._generate_follow_ups(plan, results),
+                        confidence=rag_response.confidence,
+                        query_type="rag_retrieval"
+                    )
+
             # Add to context
             self.context.add_message(ChatMessage(
                 role="assistant",
@@ -148,6 +165,21 @@ class ChatEngine:
 
         except Exception as e:
             logger.error(f"Error processing query: {e}")
+            # Try RAG as last resort
+            if self.rag_engine:
+                try:
+                    rag_response = self._query_rag(user_message)
+                    if rag_response and rag_response.confidence > 0.1:
+                        return ChatResponse(
+                            answer=rag_response.answer,
+                            sources=rag_response.sources,
+                            data={"rag_used": True, "fallback": True},
+                            follow_up_questions=["What else would you like to know?"],
+                            confidence=rag_response.confidence,
+                            query_type="rag_retrieval"
+                        )
+                except:
+                    pass
             return ChatResponse(
                 answer=f"I encountered an error processing your query: {str(e)}",
                 sources=[],
@@ -569,6 +601,34 @@ class ChatEngine:
             data_points = 1
 
         return min(0.95, 0.5 + data_points * 0.05)
+
+    def _should_use_rag(self, response: 'ChatResponse') -> bool:
+        """Determine if RAG should be used for better response"""
+        # Use RAG if response is poor
+        if response.confidence < 0.4:
+            return True
+        if "not found" in response.answer.lower():
+            return True
+        if "couldn't find" in response.answer.lower():
+            return True
+        if response.answer.strip() == "":
+            return True
+        if "Entity not found" in response.answer:
+            return True
+        # Use RAG for very short responses
+        if len(response.answer) < 50 and response.confidence < 0.7:
+            return True
+        return False
+
+    def _query_rag(self, query: str) -> Optional[Any]:
+        """Query the RAG engine"""
+        if not self.rag_engine:
+            return None
+        try:
+            return self.rag_engine.query(query, top_k=5)
+        except Exception as e:
+            logger.error(f"RAG query failed: {e}")
+            return None
 
     def get_examples(self) -> List[str]:
         """Get example queries"""
