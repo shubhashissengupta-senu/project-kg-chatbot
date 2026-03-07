@@ -3,25 +3,34 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Knowledge Graph - Project KG</title>
+    <title>Knowledge Graph - Delivery Brain</title>
     <script src="https://d3js.org/d3.v7.min.js"></script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: #0f0f1a;
+            background: #0a0a12;
             color: #fff;
             height: 100vh;
             display: flex;
+            overflow: hidden;
         }
         .sidebar {
-            width: 250px;
-            background: #1a1a2e;
+            width: 260px;
+            background: linear-gradient(180deg, #1a1a2e 0%, #16213e 100%);
             padding: 20px;
             display: flex;
             flex-direction: column;
+            border-right: 1px solid rgba(102,126,234,0.2);
         }
-        .logo { font-size: 24px; font-weight: bold; margin-bottom: 30px; }
+        .logo {
+            font-size: 22px;
+            font-weight: bold;
+            margin-bottom: 30px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
         .nav-item {
             padding: 12px 16px;
             margin-bottom: 8px;
@@ -30,173 +39,534 @@
             text-decoration: none;
             color: #aaa;
             display: block;
+            transition: all 0.3s;
         }
-        .nav-item:hover, .nav-item.active { background: rgba(102,126,234,0.2); color: #fff; }
+        .nav-item:hover, .nav-item.active {
+            background: linear-gradient(135deg, rgba(102,126,234,0.2) 0%, rgba(118,75,162,0.2) 100%);
+            color: #fff;
+            transform: translateX(5px);
+        }
+        .search-box {
+            margin-bottom: 20px;
+        }
+        .search-box input {
+            width: 100%;
+            padding: 10px 14px;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(102,126,234,0.3);
+            border-radius: 8px;
+            color: #fff;
+            font-size: 14px;
+            transition: all 0.3s;
+        }
+        .search-box input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 15px rgba(102,126,234,0.3);
+        }
+        .search-box input::placeholder { color: #666; }
+        .filter-section {
+            margin-bottom: 20px;
+        }
+        .filter-section h4 {
+            font-size: 11px;
+            text-transform: uppercase;
+            color: #666;
+            margin-bottom: 10px;
+            letter-spacing: 1px;
+        }
+        .filter-section select {
+            width: 100%;
+            padding: 10px 14px;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(102,126,234,0.3);
+            border-radius: 8px;
+            color: #fff;
+            font-size: 14px;
+            cursor: pointer;
+        }
+        .filter-section select option { background: #1a1a2e; }
+        .legend-section {
+            flex: 1;
+            overflow-y: auto;
+        }
+        .legend-section h4 {
+            font-size: 11px;
+            text-transform: uppercase;
+            color: #666;
+            margin-bottom: 10px;
+            letter-spacing: 1px;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 10px;
+            margin-bottom: 4px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .legend-item:hover {
+            background: rgba(255,255,255,0.05);
+        }
+        .legend-item.active {
+            background: rgba(102,126,234,0.2);
+        }
+        .legend-color {
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            box-shadow: 0 0 10px currentColor;
+        }
+        .legend-label { flex: 1; font-size: 13px; }
+        .legend-count {
+            font-size: 11px;
+            color: #888;
+            background: rgba(255,255,255,0.1);
+            padding: 2px 8px;
+            border-radius: 10px;
+        }
         .user-info {
             margin-top: auto;
             padding: 16px;
-            background: rgba(255,255,255,0.05);
-            border-radius: 8px;
+            background: rgba(255,255,255,0.03);
+            border-radius: 12px;
+            border: 1px solid rgba(255,255,255,0.05);
         }
-        .main { flex: 1; display: flex; flex-direction: column; }
+        .user-info .name { font-weight: 600; margin-bottom: 4px; }
+        .user-info .role { font-size: 12px; color: #888; }
+        .user-info a {
+            color: #667eea;
+            font-size: 12px;
+            margin-top: 8px;
+            display: inline-block;
+            text-decoration: none;
+        }
+        .user-info a:hover { text-decoration: underline; }
+
+        .main { flex: 1; display: flex; flex-direction: column; position: relative; }
+
         .header {
-            padding: 20px 30px;
-            border-bottom: 1px solid rgba(255,255,255,0.1);
+            padding: 15px 25px;
+            background: rgba(0,0,0,0.3);
+            border-bottom: 1px solid rgba(102,126,234,0.2);
             display: flex;
             justify-content: space-between;
             align-items: center;
+            z-index: 10;
         }
-        .controls {
-            padding: 20px 30px;
-            border-bottom: 1px solid rgba(255,255,255,0.1);
+        .header h2 {
+            font-size: 18px;
+            font-weight: 600;
+        }
+        .header-controls {
             display: flex;
-            gap: 20px;
+            gap: 15px;
             align-items: center;
-            flex-wrap: wrap;
         }
-        .control-group { display: flex; flex-direction: column; gap: 4px; }
-        .control-group label { font-size: 12px; color: #888; }
-        .control-group select, .control-group input {
-            padding: 8px 12px;
-            background: rgba(255,255,255,0.1);
-            border: 1px solid rgba(255,255,255,0.2);
+        .view-btn {
+            padding: 8px 16px;
+            background: rgba(102,126,234,0.2);
+            border: 1px solid rgba(102,126,234,0.3);
             border-radius: 6px;
             color: #fff;
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.3s;
         }
-        .time-control {
-            flex: 1;
-            min-width: 300px;
+        .view-btn:hover {
+            background: rgba(102,126,234,0.4);
         }
-        .time-control input[type="range"] {
-            width: 100%;
+        .view-btn.active {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-color: transparent;
         }
-        .snapshot-label {
-            text-align: center;
-            font-size: 14px;
+
+        .timeline-bar {
+            padding: 15px 25px;
+            background: rgba(0,0,0,0.2);
+            border-bottom: 1px solid rgba(102,126,234,0.1);
+        }
+        .timeline-label {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+            font-size: 12px;
+            color: #888;
+        }
+        .timeline-label .current {
             color: #667eea;
-            margin-top: 4px;
+            font-weight: 600;
+        }
+        .timeline-slider {
+            width: 100%;
+            height: 6px;
+            -webkit-appearance: none;
+            background: rgba(255,255,255,0.1);
+            border-radius: 3px;
+            outline: none;
+        }
+        .timeline-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 18px;
+            height: 18px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 50%;
+            cursor: pointer;
+            box-shadow: 0 0 15px rgba(102,126,234,0.5);
         }
         .milestone-markers {
             display: flex;
             justify-content: space-between;
-            margin-top: 8px;
-            padding: 0 4px;
-            font-size: 10px;
+            margin-top: 10px;
+            padding: 0 5px;
         }
         .milestone-marker {
             display: flex;
             flex-direction: column;
             align-items: center;
             cursor: pointer;
-            padding: 4px;
-            border-radius: 4px;
-            transition: background 0.2s;
+            padding: 5px;
+            border-radius: 6px;
+            transition: all 0.2s;
+            opacity: 0.7;
         }
         .milestone-marker:hover {
-            background: rgba(102,126,234,0.3);
+            opacity: 1;
+            background: rgba(102,126,234,0.2);
         }
         .milestone-marker.active {
-            background: rgba(102,126,234,0.4);
+            opacity: 1;
+            background: rgba(102,126,234,0.3);
         }
         .milestone-dot {
-            width: 8px;
-            height: 8px;
+            width: 10px;
+            height: 10px;
             border-radius: 50%;
-            margin-bottom: 2px;
+            margin-bottom: 4px;
+            box-shadow: 0 0 8px currentColor;
         }
-        .milestone-dot.client { background: #feca57; }
-        .milestone-dot.qa { background: #4ecdc4; }
-        .milestone-dot.scrum { background: #667eea; }
+        .milestone-dot.client { background: #feca57; color: #feca57; }
+        .milestone-dot.qa { background: #4ecdc4; color: #4ecdc4; }
+        .milestone-dot.scrum { background: #667eea; color: #667eea; }
         .milestone-label {
+            font-size: 9px;
             color: #888;
             white-space: nowrap;
         }
-        .graph-container { flex: 1; position: relative; overflow: hidden; }
+
+        .graph-container {
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+            background: radial-gradient(ellipse at center, #1a1a2e 0%, #0a0a12 100%);
+        }
+
+        /* Grid background */
+        .graph-container::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-image:
+                linear-gradient(rgba(102,126,234,0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(102,126,234,0.03) 1px, transparent 1px);
+            background-size: 50px 50px;
+            pointer-events: none;
+        }
+
         #graph { width: 100%; height: 100%; }
-        .node circle { stroke: #fff; stroke-width: 2px; cursor: pointer; }
-        .node text { font-size: 10px; fill: #fff; pointer-events: none; }
-        .link { stroke: rgba(255,255,255,0.3); stroke-width: 1px; }
+
+        /* Edge styles */
+        .link {
+            stroke: rgba(102,126,234,0.3);
+            stroke-width: 1.5px;
+            fill: none;
+        }
+        .link.highlighted {
+            stroke: #667eea;
+            stroke-width: 3px;
+            filter: drop-shadow(0 0 5px #667eea);
+        }
+
+        /* Arrow markers */
+        .arrow {
+            fill: rgba(102,126,234,0.5);
+        }
+
+        /* Node styles */
+        .node { cursor: pointer; }
+        .node circle {
+            stroke-width: 2px;
+            transition: all 0.3s;
+        }
+        .node:hover circle {
+            filter: brightness(1.3) drop-shadow(0 0 15px currentColor);
+            transform: scale(1.1);
+        }
+        .node.highlighted circle {
+            stroke: #fff;
+            stroke-width: 3px;
+            filter: drop-shadow(0 0 20px currentColor);
+        }
+        .node.dimmed {
+            opacity: 0.2;
+        }
+        .node text {
+            font-size: 10px;
+            fill: #fff;
+            pointer-events: none;
+            text-shadow: 0 0 10px rgba(0,0,0,0.8);
+            font-weight: 500;
+        }
+        .node.highlighted text {
+            font-weight: 700;
+            fill: #fff;
+        }
+
+        /* Tooltip */
         .tooltip {
             position: absolute;
-            background: rgba(0,0,0,0.95);
-            padding: 12px 16px;
-            border-radius: 8px;
+            background: linear-gradient(135deg, rgba(26,26,46,0.98) 0%, rgba(22,33,62,0.98) 100%);
+            padding: 16px 20px;
+            border-radius: 12px;
             font-size: 13px;
             pointer-events: none;
-            max-width: 400px;
-            max-height: 300px;
-            overflow-y: auto;
-            z-index: 100;
-            border: 1px solid rgba(255,255,255,0.1);
-            line-height: 1.5;
+            max-width: 350px;
+            z-index: 1000;
+            border: 1px solid rgba(102,126,234,0.3);
+            box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+            backdrop-filter: blur(10px);
         }
-        .legend {
+        .tooltip-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 12px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+        .tooltip-icon {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+        }
+        .tooltip-title {
+            font-weight: 600;
+            font-size: 15px;
+        }
+        .tooltip-type {
+            font-size: 11px;
+            color: #888;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .tooltip-content {
+            font-size: 12px;
+            line-height: 1.6;
+        }
+        .tooltip-row {
+            display: flex;
+            margin-bottom: 6px;
+        }
+        .tooltip-key {
+            color: #888;
+            min-width: 100px;
+        }
+        .tooltip-value {
+            color: #fff;
+            flex: 1;
+        }
+
+        /* Stats panel */
+        .stats-panel {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            background: rgba(0,0,0,0.7);
+            padding: 15px 20px;
+            border-radius: 12px;
+            font-size: 12px;
+            border: 1px solid rgba(102,126,234,0.2);
+            backdrop-filter: blur(10px);
+        }
+        .stats-panel h4 {
+            font-size: 10px;
+            text-transform: uppercase;
+            color: #666;
+            margin-bottom: 10px;
+            letter-spacing: 1px;
+        }
+        .stat-row {
+            display: flex;
+            justify-content: space-between;
+            gap: 20px;
+            margin-bottom: 6px;
+        }
+        .stat-label { color: #888; }
+        .stat-value {
+            font-weight: 600;
+            color: #667eea;
+        }
+
+        /* Zoom controls */
+        .zoom-controls {
             position: absolute;
             bottom: 20px;
-            left: 20px;
-            background: rgba(0,0,0,0.7);
-            padding: 16px;
-            border-radius: 8px;
-        }
-        .legend-item { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 12px; }
-        .legend-color { width: 12px; height: 12px; border-radius: 50%; }
-        .stats {
-            position: absolute;
-            top: 20px;
             right: 20px;
-            background: rgba(0,0,0,0.7);
-            padding: 16px;
-            border-radius: 8px;
-            font-size: 13px;
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
         }
+        .zoom-btn {
+            width: 36px;
+            height: 36px;
+            background: rgba(0,0,0,0.7);
+            border: 1px solid rgba(102,126,234,0.3);
+            border-radius: 8px;
+            color: #fff;
+            cursor: pointer;
+            font-size: 18px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+        }
+        .zoom-btn:hover {
+            background: rgba(102,126,234,0.3);
+            border-color: #667eea;
+        }
+
+        /* Loading */
         .loading {
             position: absolute;
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            font-size: 18px;
+            text-align: center;
+        }
+        .loading-spinner {
+            width: 50px;
+            height: 50px;
+            border: 3px solid rgba(102,126,234,0.2);
+            border-top-color: #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 15px;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        .loading-text {
             color: #888;
+            font-size: 14px;
+        }
+
+        /* Instructions */
+        .instructions {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            background: rgba(0,0,0,0.6);
+            padding: 12px 16px;
+            border-radius: 8px;
+            font-size: 11px;
+            color: #666;
+            max-width: 250px;
+        }
+        .instructions kbd {
+            background: rgba(255,255,255,0.1);
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: monospace;
         }
     </style>
 </head>
 <body>
     <div class="sidebar">
-        <div class="logo">Project KG</div>
+        <div class="logo">Delivery Brain</div>
+
+        <div class="search-box">
+            <input type="text" id="searchInput" placeholder="Search nodes...">
+        </div>
+
+        <div class="filter-section">
+            <h4>Filter by Type</h4>
+            <select id="typeFilter">
+                <option value="all">All Types</option>
+            </select>
+        </div>
+
+        <div class="filter-section">
+            <h4>Layout</h4>
+            <select id="layoutSelect">
+                <option value="force">Force-Directed</option>
+                <option value="radial">Radial</option>
+                <option value="cluster">Clustered</option>
+            </select>
+        </div>
+
+        <div class="legend-section">
+            <h4>Entity Types</h4>
+            <div id="legend"></div>
+        </div>
+
         <a href="/chat" class="nav-item">Chat</a>
         <a href="/graph" class="nav-item active">Knowledge Graph</a>
         <a href="/dashboard" class="nav-item">Dashboard</a>
         <a href="/simulation" class="nav-item">Simulation</a>
+
         <div class="user-info">
-            <div id="userName">User</div>
-            <div style="font-size:12px;color:#888" id="userRole">Role</div>
-            <a href="/login" style="color:#667eea;font-size:12px;margin-top:8px;display:block;">Logout</a>
+            <div class="name" id="userName">User</div>
+            <div class="role" id="userRole">Role</div>
+            <a href="/login">Sign out</a>
         </div>
     </div>
+
     <div class="main">
         <div class="header">
             <h2>Knowledge Graph</h2>
-            <span id="snapshotLabel">Loading...</span>
-        </div>
-        <div class="controls">
-            <div class="control-group time-control">
-                <label>Time Travel: <span id="timeLabel">Current</span></label>
-                <input type="range" id="timeSlider" min="0" max="20" value="20">
-                <div class="snapshot-label" id="snapshotInfo">Use slider to view graph at different points in time</div>
-                <div class="milestone-markers" id="milestoneMarkers"></div>
-            </div>
-            <div class="control-group">
-                <label>Filter by Type</label>
-                <select id="typeFilter">
-                    <option value="all">All Types</option>
-                </select>
+            <div class="header-controls">
+                <span id="snapshotLabel" style="color:#888;font-size:13px;">Loading...</span>
             </div>
         </div>
+
+        <div class="timeline-bar">
+            <div class="timeline-label">
+                <span>Time Travel</span>
+                <span class="current" id="timeLabel">Current</span>
+            </div>
+            <input type="range" class="timeline-slider" id="timeSlider" min="0" max="20" value="20">
+            <div class="milestone-markers" id="milestoneMarkers"></div>
+        </div>
+
         <div class="graph-container">
-            <div class="loading" id="loading">Loading graph data...</div>
+            <div class="loading" id="loading">
+                <div class="loading-spinner"></div>
+                <div class="loading-text">Loading knowledge graph...</div>
+            </div>
             <svg id="graph"></svg>
-            <div class="legend" id="legend"></div>
-            <div class="stats" id="stats"></div>
+            <div class="stats-panel" id="stats"></div>
             <div class="tooltip" id="tooltip" style="display:none;"></div>
+            <div class="zoom-controls">
+                <button class="zoom-btn" id="zoomIn">+</button>
+                <button class="zoom-btn" id="zoomOut">-</button>
+                <button class="zoom-btn" id="zoomReset">R</button>
+            </div>
+            <div class="instructions">
+                <strong>Controls:</strong><br>
+                Scroll to zoom | Drag to pan<br>
+                Click node to highlight connections<br>
+                Double-click to focus
+            </div>
         </div>
     </div>
 
@@ -205,25 +575,57 @@
         const user = JSON.parse(localStorage.getItem('user') || '{}');
         if (!sessionId) window.location.href = '/login';
 
-        document.getElementById('userName').textContent = user.username || 'User';
-        document.getElementById('userRole').textContent = user.role?.name || 'Unknown';
+        document.getElementById('userName').textContent = user.display_name || user.username || 'User';
+        document.getElementById('userRole').textContent = user.role_display || user.role?.name || 'Unknown';
 
+        // Enhanced color palette with gradients
         const colors = {
-            Person: '#667eea',
-            Stream: '#f093fb',
-            Risk: '#ff6b6b',
-            Milestone: '#4ecdc4',
-            ChangeRequest: '#feca57',
-            Task: '#54a0ff',
-            Meeting: '#5f27cd',
-            Project: '#00d2d3',
-            MetricSnapshot: '#a55eea',
-            default: '#888'
+            Project: { fill: '#00d2d3', glow: '#00d2d3' },
+            Stream: { fill: '#f093fb', glow: '#f093fb' },
+            Person: { fill: '#667eea', glow: '#667eea' },
+            Risk: { fill: '#ff6b6b', glow: '#ff6b6b' },
+            Milestone: { fill: '#4ecdc4', glow: '#4ecdc4' },
+            ChangeRequest: { fill: '#feca57', glow: '#feca57' },
+            Task: { fill: '#54a0ff', glow: '#54a0ff' },
+            Meeting: { fill: '#5f27cd', glow: '#5f27cd' },
+            MetricSnapshot: { fill: '#a55eea', glow: '#a55eea' },
+            Defect: { fill: '#ee5a24', glow: '#ee5a24' },
+            default: { fill: '#888', glow: '#888' }
+        };
+
+        // Node size by type
+        const nodeSizes = {
+            Project: 30,
+            Stream: 22,
+            Person: 14,
+            Risk: 12,
+            Milestone: 16,
+            ChangeRequest: 14,
+            Task: 10,
+            Meeting: 12,
+            MetricSnapshot: 8,
+            default: 10
+        };
+
+        // Icons for node types
+        const nodeIcons = {
+            Project: '🏢',
+            Stream: '🌊',
+            Person: '👤',
+            Risk: '⚠️',
+            Milestone: '🎯',
+            ChangeRequest: '📝',
+            Task: '✓',
+            Meeting: '📅',
+            MetricSnapshot: '📊',
+            Defect: '🐛'
         };
 
         let currentData = null;
         let allSnapshots = [];
         let simulation = null;
+        let selectedNode = null;
+        let currentZoom = d3.zoomIdentity;
 
         const container = document.querySelector('.graph-container');
         const width = container.clientWidth || 800;
@@ -234,9 +636,70 @@
             .attr('height', '100%')
             .attr('viewBox', [0, 0, width, height]);
 
+        // Add defs for gradients and arrows
+        const defs = svg.append('defs');
+
+        // Create gradients for each node type
+        Object.entries(colors).forEach(([type, color]) => {
+            const gradient = defs.append('radialGradient')
+                .attr('id', `gradient-${type}`)
+                .attr('cx', '30%')
+                .attr('cy', '30%');
+            gradient.append('stop')
+                .attr('offset', '0%')
+                .attr('stop-color', d3.color(color.fill).brighter(0.5));
+            gradient.append('stop')
+                .attr('offset', '100%')
+                .attr('stop-color', color.fill);
+        });
+
+        // Arrow marker
+        defs.append('marker')
+            .attr('id', 'arrow')
+            .attr('viewBox', '0 -5 10 10')
+            .attr('refX', 20)
+            .attr('refY', 0)
+            .attr('markerWidth', 6)
+            .attr('markerHeight', 6)
+            .attr('orient', 'auto')
+            .append('path')
+            .attr('d', 'M0,-5L10,0L0,5')
+            .attr('class', 'arrow');
+
         const g = svg.append('g');
 
-        svg.call(d3.zoom().on('zoom', (e) => g.attr('transform', e.transform)));
+        // Zoom behavior
+        const zoom = d3.zoom()
+            .scaleExtent([0.2, 4])
+            .on('zoom', (e) => {
+                currentZoom = e.transform;
+                g.attr('transform', e.transform);
+            });
+
+        svg.call(zoom);
+
+        // Zoom controls
+        document.getElementById('zoomIn').addEventListener('click', () => {
+            svg.transition().duration(300).call(zoom.scaleBy, 1.3);
+        });
+        document.getElementById('zoomOut').addEventListener('click', () => {
+            svg.transition().duration(300).call(zoom.scaleBy, 0.7);
+        });
+        document.getElementById('zoomReset').addEventListener('click', () => {
+            svg.transition().duration(500).call(zoom.transform, d3.zoomIdentity);
+        });
+
+        // Key milestone dates
+        const milestones = [
+            { date: '2025-12-01', label: 'Start', type: 'scrum' },
+            { date: '2025-12-18', label: 'Client 1', type: 'client' },
+            { date: '2025-12-19', label: 'QA 1', type: 'qa' },
+            { date: '2026-01-16', label: 'QA 2', type: 'qa' },
+            { date: '2026-01-20', label: 'Client 2', type: 'client' },
+            { date: '2026-02-13', label: 'QA 3', type: 'qa' },
+            { date: '2026-02-20', label: 'Client 3', type: 'client' },
+            { date: '2026-03-07', label: 'Now', type: 'scrum' }
+        ];
 
         async function loadGraphData(snapshotIndex = null) {
             document.getElementById('loading').style.display = 'block';
@@ -254,7 +717,6 @@
                 currentData = data;
                 allSnapshots = data.snapshots || [];
 
-                // Update slider
                 const slider = document.getElementById('timeSlider');
                 slider.max = Math.max(0, allSnapshots.length - 1);
                 if (snapshotIndex === null) {
@@ -270,7 +732,10 @@
                 updateTimeLabel();
             } catch (err) {
                 console.error('Error loading graph:', err);
-                document.getElementById('loading').textContent = 'Error loading graph data. Please refresh.';
+                document.getElementById('loading').innerHTML = `
+                    <div style="color:#ff6b6b;">Error loading graph</div>
+                    <div style="color:#888;font-size:12px;margin-top:10px;">Please refresh the page</div>
+                `;
             }
         }
 
@@ -281,25 +746,10 @@
             if (allSnapshots.length > 0 && index < allSnapshots.length) {
                 const snapshot = allSnapshots[index];
                 document.getElementById('timeLabel').textContent = snapshot.label;
-                document.getElementById('snapshotInfo').textContent =
-                    snapshot.timestamp ? new Date(snapshot.timestamp).toLocaleDateString() : snapshot.label;
             } else {
                 document.getElementById('timeLabel').textContent = 'Current';
-                document.getElementById('snapshotInfo').textContent = 'Latest state';
             }
         }
-
-        // Key milestone dates for the project
-        const milestones = [
-            { date: '2025-12-01', label: 'Project Start', type: 'scrum' },
-            { date: '2025-12-18', label: 'Client Review 1', type: 'client' },
-            { date: '2025-12-19', label: 'QA Review 1', type: 'qa' },
-            { date: '2026-01-16', label: 'QA Review 2', type: 'qa' },
-            { date: '2026-01-20', label: 'Client Review 2', type: 'client' },
-            { date: '2026-02-13', label: 'QA Review 3', type: 'qa' },
-            { date: '2026-02-20', label: 'Client Review 3', type: 'client' },
-            { date: '2026-03-07', label: 'Current', type: 'scrum' }
-        ];
 
         function renderMilestoneMarkers() {
             const container = document.getElementById('milestoneMarkers');
@@ -308,17 +758,14 @@
                 return;
             }
 
-            // Find snapshot indices that match milestone dates
             const markerHtml = milestones.map(m => {
-                // Find closest snapshot to this date
                 let closestIndex = -1;
                 let closestDiff = Infinity;
 
                 allSnapshots.forEach((snap, idx) => {
                     if (snap.timestamp) {
                         const snapDate = snap.timestamp.split('T')[0];
-                        const mDate = m.date;
-                        const diff = Math.abs(new Date(snapDate) - new Date(mDate));
+                        const diff = Math.abs(new Date(snapDate) - new Date(m.date));
                         if (diff < closestDiff) {
                             closestDiff = diff;
                             closestIndex = idx;
@@ -326,7 +773,6 @@
                     }
                 });
 
-                // Only show if within 3 days of a snapshot
                 if (closestIndex >= 0 && closestDiff <= 3 * 24 * 60 * 60 * 1000) {
                     return `<div class="milestone-marker" data-index="${closestIndex}" title="${m.label} (${m.date})">
                         <div class="milestone-dot ${m.type}"></div>
@@ -338,15 +784,12 @@
 
             container.innerHTML = markerHtml;
 
-            // Add click handlers
             container.querySelectorAll('.milestone-marker').forEach(marker => {
                 marker.addEventListener('click', () => {
                     const index = parseInt(marker.dataset.index);
                     document.getElementById('timeSlider').value = index;
                     updateTimeLabel();
                     loadGraphData(index);
-
-                    // Highlight active marker
                     container.querySelectorAll('.milestone-marker').forEach(m => m.classList.remove('active'));
                     marker.classList.add('active');
                 });
@@ -356,14 +799,9 @@
         function populateTypeFilter(nodes) {
             const select = document.getElementById('typeFilter');
             const currentValue = select.value;
-
-            // Get unique types and sort them
             const types = [...new Set(nodes.map(n => n.type))].sort();
 
-            // Clear existing options except "All Types"
             select.innerHTML = '<option value="all">All Types</option>';
-
-            // Add options for each type
             types.forEach(type => {
                 const option = document.createElement('option');
                 option.value = type;
@@ -371,24 +809,54 @@
                 select.appendChild(option);
             });
 
-            // Restore previous selection if still valid
             if (types.includes(currentValue)) {
                 select.value = currentValue;
             }
         }
 
+        function renderLegend(nodes) {
+            const typeCounts = {};
+            nodes.forEach(n => {
+                typeCounts[n.type] = (typeCounts[n.type] || 0) + 1;
+            });
+
+            const legendHtml = Object.entries(typeCounts)
+                .sort((a, b) => b[1] - a[1])
+                .map(([type, count]) => {
+                    const color = colors[type] || colors.default;
+                    return `<div class="legend-item" data-type="${type}">
+                        <div class="legend-color" style="background:${color.fill};color:${color.glow}"></div>
+                        <span class="legend-label">${type}</span>
+                        <span class="legend-count">${count}</span>
+                    </div>`;
+                }).join('');
+
+            document.getElementById('legend').innerHTML = legendHtml;
+
+            // Add click handlers to legend items
+            document.querySelectorAll('.legend-item').forEach(item => {
+                item.addEventListener('click', () => {
+                    const type = item.dataset.type;
+                    document.getElementById('typeFilter').value = type;
+                    if (currentData) renderGraph(currentData);
+                    document.querySelectorAll('.legend-item').forEach(i => i.classList.remove('active'));
+                    item.classList.add('active');
+                });
+            });
+        }
+
         function renderGraph(data) {
             g.selectAll('*').remove();
+            selectedNode = null;
 
-            let nodes = data.nodes || [];
-            let links = data.edges || [];
+            let nodes = [...(data.nodes || [])];
+            let links = [...(data.edges || [])];
 
             // Apply type filter
             const typeFilter = document.getElementById('typeFilter').value;
             if (typeFilter !== 'all') {
                 const nodeIds = new Set(nodes.filter(n => n.type === typeFilter).map(n => n.id));
                 nodes = nodes.filter(n => n.type === typeFilter);
-                // Only keep links where BOTH source and target are in filtered nodes
                 links = links.filter(l => {
                     const sourceId = typeof l.source === 'object' ? l.source.id : l.source;
                     const targetId = typeof l.target === 'object' ? l.target.id : l.target;
@@ -396,97 +864,317 @@
                 });
             }
 
-            // Limit nodes for performance
-            if (nodes.length > 100) {
-                nodes = nodes.slice(0, 100);
+            // Calculate node importance (connection count)
+            const nodeConnections = {};
+            links.forEach(l => {
+                const sid = typeof l.source === 'object' ? l.source.id : l.source;
+                const tid = typeof l.target === 'object' ? l.target.id : l.target;
+                nodeConnections[sid] = (nodeConnections[sid] || 0) + 1;
+                nodeConnections[tid] = (nodeConnections[tid] || 0) + 1;
+            });
+
+            // Limit nodes for performance but prioritize connected nodes
+            if (nodes.length > 150) {
+                nodes.sort((a, b) => (nodeConnections[b.id] || 0) - (nodeConnections[a.id] || 0));
+                nodes = nodes.slice(0, 150);
                 const nodeIds = new Set(nodes.map(n => n.id));
-                links = links.filter(l => nodeIds.has(l.source) && nodeIds.has(l.target));
+                links = links.filter(l => {
+                    const sid = typeof l.source === 'object' ? l.source.id : l.source;
+                    const tid = typeof l.target === 'object' ? l.target.id : l.target;
+                    return nodeIds.has(sid) && nodeIds.has(tid);
+                });
             }
+
+            // Render legend with filtered nodes
+            renderLegend(nodes);
 
             if (simulation) simulation.stop();
 
+            // Get layout type
+            const layoutType = document.getElementById('layoutSelect').value;
+
+            // Create simulation based on layout
+            if (layoutType === 'radial') {
+                // Radial layout - place by type
+                const typeGroups = {};
+                nodes.forEach(n => {
+                    if (!typeGroups[n.type]) typeGroups[n.type] = [];
+                    typeGroups[n.type].push(n);
+                });
+
+                const typeList = Object.keys(typeGroups);
+                typeList.forEach((type, i) => {
+                    const angle = (2 * Math.PI * i) / typeList.length;
+                    const radius = 200;
+                    typeGroups[type].forEach((node, j) => {
+                        const spread = 100;
+                        node.x = width/2 + Math.cos(angle) * radius + (Math.random() - 0.5) * spread;
+                        node.y = height/2 + Math.sin(angle) * radius + (Math.random() - 0.5) * spread;
+                    });
+                });
+            }
+
             simulation = d3.forceSimulation(nodes)
-                .force('link', d3.forceLink(links).id(d => d.id).distance(80))
-                .force('charge', d3.forceManyBody().strength(-200))
+                .force('link', d3.forceLink(links).id(d => d.id).distance(d => {
+                    return layoutType === 'cluster' ? 60 : 100;
+                }).strength(0.5))
+                .force('charge', d3.forceManyBody().strength(d => {
+                    return layoutType === 'cluster' ? -100 : -300;
+                }))
                 .force('center', d3.forceCenter(width / 2, height / 2))
-                .force('collision', d3.forceCollide().radius(30));
+                .force('collision', d3.forceCollide().radius(d => {
+                    const baseSize = nodeSizes[d.type] || nodeSizes.default;
+                    return baseSize + 10;
+                }));
 
+            if (layoutType === 'cluster') {
+                // Add clustering force
+                const typeGroups = {};
+                nodes.forEach(n => {
+                    if (!typeGroups[n.type]) typeGroups[n.type] = [];
+                    typeGroups[n.type].push(n);
+                });
+
+                simulation.force('x', d3.forceX(d => {
+                    const typeList = Object.keys(typeGroups);
+                    const idx = typeList.indexOf(d.type);
+                    return width * (idx + 1) / (typeList.length + 1);
+                }).strength(0.3));
+            }
+
+            // Draw curved links
             const link = g.append('g')
-                .selectAll('line')
+                .selectAll('path')
                 .data(links)
-                .join('line')
-                .attr('class', 'link');
+                .join('path')
+                .attr('class', 'link')
+                .attr('marker-end', 'url(#arrow)');
 
+            // Draw nodes
             const node = g.append('g')
                 .selectAll('g')
                 .data(nodes)
                 .join('g')
                 .attr('class', 'node')
                 .call(d3.drag()
-                    .on('start', (e, d) => { if (!e.active) simulation.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; })
-                    .on('drag', (e, d) => { d.fx = e.x; d.fy = e.y; })
-                    .on('end', (e, d) => { if (!e.active) simulation.alphaTarget(0); d.fx = null; d.fy = null; }));
+                    .on('start', dragStarted)
+                    .on('drag', dragged)
+                    .on('end', dragEnded));
 
+            // Node circles with gradients
             node.append('circle')
-                .attr('r', d => d.type === 'Project' ? 20 : d.type === 'Stream' ? 15 : 10)
-                .attr('fill', d => colors[d.type] || colors.default)
-                .on('mouseover', (e, d) => {
-                    const tooltip = document.getElementById('tooltip');
-                    let content = `<strong>${d.label}</strong><br><span style="color:#888">Type:</span> ${d.type}`;
-                    if (d.data) {
-                        const skipKeys = ['entity_type', 'name', 'label'];
-                        for (const [key, value] of Object.entries(d.data)) {
-                            if (value && !skipKeys.includes(key)) {
-                                const displayKey = key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-                                content += `<br><span style="color:#888">${displayKey}:</span> ${value}`;
-                            }
-                        }
-                    }
-                    tooltip.innerHTML = content;
-                    tooltip.style.display = 'block';
-                    tooltip.style.left = (e.pageX + 10) + 'px';
-                    tooltip.style.top = (e.pageY + 10) + 'px';
+                .attr('r', d => {
+                    const baseSize = nodeSizes[d.type] || nodeSizes.default;
+                    const connections = nodeConnections[d.id] || 0;
+                    return baseSize + Math.min(connections * 0.5, 8);
                 })
-                .on('mouseout', () => document.getElementById('tooltip').style.display = 'none');
+                .attr('fill', d => `url(#gradient-${colors[d.type] ? d.type : 'default'})`)
+                .attr('stroke', d => (colors[d.type] || colors.default).fill)
+                .attr('stroke-opacity', 0.6)
+                .on('click', (e, d) => handleNodeClick(e, d, nodes, links, node, link))
+                .on('dblclick', (e, d) => focusOnNode(d))
+                .on('mouseover', (e, d) => showTooltip(e, d))
+                .on('mouseout', hideTooltip);
 
+            // Node labels
             node.append('text')
-                .text(d => d.label)
-                .attr('dy', 20)
-                .attr('text-anchor', 'middle')
-                .attr('font-size', '9px');
+                .text(d => d.label.length > 15 ? d.label.substring(0, 15) + '...' : d.label)
+                .attr('dy', d => (nodeSizes[d.type] || nodeSizes.default) + 14)
+                .attr('text-anchor', 'middle');
 
+            // Simulation tick
             simulation.on('tick', () => {
-                link.attr('x1', d => d.source.x).attr('y1', d => d.source.y)
-                    .attr('x2', d => d.target.x).attr('y2', d => d.target.y);
+                // Curved links
+                link.attr('d', d => {
+                    const dx = d.target.x - d.source.x;
+                    const dy = d.target.y - d.source.y;
+                    const dr = Math.sqrt(dx * dx + dy * dy) * 2;
+                    return `M${d.source.x},${d.source.y}A${dr},${dr} 0 0,1 ${d.target.x},${d.target.y}`;
+                });
+
                 node.attr('transform', d => `translate(${d.x},${d.y})`);
             });
 
             // Update stats
-            document.getElementById('stats').innerHTML = `
-                <div><strong>Nodes:</strong> ${nodes.length}</div>
-                <div><strong>Edges:</strong> ${links.length}</div>
-                <div><strong>Snapshots:</strong> ${allSnapshots.length}</div>
-            `;
-
-            // Update legend
-            const types = [...new Set(nodes.map(n => n.type))];
-            document.getElementById('legend').innerHTML = types.map(t =>
-                `<div class="legend-item"><div class="legend-color" style="background:${colors[t] || colors.default}"></div>${t}</div>`
-            ).join('');
+            updateStats(nodes, links);
         }
 
-        // Event listeners
-        document.getElementById('timeSlider').addEventListener('input', (e) => {
-            updateTimeLabel();
+        function dragStarted(e, d) {
+            if (!e.active) simulation.alphaTarget(0.3).restart();
+            d.fx = d.x;
+            d.fy = d.y;
+        }
+
+        function dragged(e, d) {
+            d.fx = e.x;
+            d.fy = e.y;
+        }
+
+        function dragEnded(e, d) {
+            if (!e.active) simulation.alphaTarget(0);
+            d.fx = null;
+            d.fy = null;
+        }
+
+        function handleNodeClick(e, d, nodes, links, nodeSelection, linkSelection) {
+            e.stopPropagation();
+
+            if (selectedNode === d.id) {
+                // Deselect
+                selectedNode = null;
+                nodeSelection.classed('highlighted', false).classed('dimmed', false);
+                linkSelection.classed('highlighted', false);
+                return;
+            }
+
+            selectedNode = d.id;
+
+            // Find connected nodes
+            const connectedNodes = new Set([d.id]);
+            links.forEach(l => {
+                const sid = typeof l.source === 'object' ? l.source.id : l.source;
+                const tid = typeof l.target === 'object' ? l.target.id : l.target;
+                if (sid === d.id) connectedNodes.add(tid);
+                if (tid === d.id) connectedNodes.add(sid);
+            });
+
+            // Highlight connected
+            nodeSelection
+                .classed('highlighted', n => connectedNodes.has(n.id))
+                .classed('dimmed', n => !connectedNodes.has(n.id));
+
+            linkSelection.classed('highlighted', l => {
+                const sid = typeof l.source === 'object' ? l.source.id : l.source;
+                const tid = typeof l.target === 'object' ? l.target.id : l.target;
+                return sid === d.id || tid === d.id;
+            });
+        }
+
+        function focusOnNode(d) {
+            const scale = 1.5;
+            const x = width / 2 - d.x * scale;
+            const y = height / 2 - d.y * scale;
+
+            svg.transition()
+                .duration(750)
+                .call(zoom.transform, d3.zoomIdentity.translate(x, y).scale(scale));
+        }
+
+        function showTooltip(e, d) {
+            const tooltip = document.getElementById('tooltip');
+            const color = (colors[d.type] || colors.default).fill;
+            const icon = nodeIcons[d.type] || '●';
+
+            let content = `
+                <div class="tooltip-header">
+                    <div class="tooltip-icon" style="background:${color}">${icon}</div>
+                    <div>
+                        <div class="tooltip-title">${d.label}</div>
+                        <div class="tooltip-type">${d.type}</div>
+                    </div>
+                </div>
+                <div class="tooltip-content">
+            `;
+
+            if (d.data) {
+                const skipKeys = ['entity_type', 'name', 'label', 'source'];
+                let rowCount = 0;
+                for (const [key, value] of Object.entries(d.data)) {
+                    if (value && !skipKeys.includes(key) && rowCount < 8) {
+                        const displayKey = key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+                        const displayValue = String(value).length > 50 ? String(value).substring(0, 50) + '...' : value;
+                        content += `<div class="tooltip-row">
+                            <span class="tooltip-key">${displayKey}</span>
+                            <span class="tooltip-value">${displayValue}</span>
+                        </div>`;
+                        rowCount++;
+                    }
+                }
+            }
+
+            content += '</div>';
+            tooltip.innerHTML = content;
+            tooltip.style.display = 'block';
+
+            // Position tooltip
+            const rect = container.getBoundingClientRect();
+            let left = e.clientX - rect.left + 15;
+            let top = e.clientY - rect.top + 15;
+
+            // Prevent overflow
+            if (left + 350 > rect.width) left = e.clientX - rect.left - 360;
+            if (top + 200 > rect.height) top = e.clientY - rect.top - 210;
+
+            tooltip.style.left = left + 'px';
+            tooltip.style.top = top + 'px';
+        }
+
+        function hideTooltip() {
+            document.getElementById('tooltip').style.display = 'none';
+        }
+
+        function updateStats(nodes, links) {
+            const typeCounts = {};
+            nodes.forEach(n => {
+                typeCounts[n.type] = (typeCounts[n.type] || 0) + 1;
+            });
+
+            document.getElementById('stats').innerHTML = `
+                <h4>Graph Statistics</h4>
+                <div class="stat-row">
+                    <span class="stat-label">Nodes</span>
+                    <span class="stat-value">${nodes.length}</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Edges</span>
+                    <span class="stat-value">${links.length}</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Types</span>
+                    <span class="stat-value">${Object.keys(typeCounts).length}</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Snapshots</span>
+                    <span class="stat-value">${allSnapshots.length}</span>
+                </div>
+            `;
+        }
+
+        // Search functionality
+        document.getElementById('searchInput').addEventListener('input', (e) => {
+            const query = e.target.value.toLowerCase();
+            if (!query) {
+                d3.selectAll('.node').classed('dimmed', false).classed('highlighted', false);
+                return;
+            }
+
+            d3.selectAll('.node')
+                .classed('highlighted', d => d.label.toLowerCase().includes(query))
+                .classed('dimmed', d => !d.label.toLowerCase().includes(query));
         });
 
+        // Event listeners
+        document.getElementById('timeSlider').addEventListener('input', updateTimeLabel);
         document.getElementById('timeSlider').addEventListener('change', (e) => {
-            const index = parseInt(e.target.value);
-            loadGraphData(index);
+            loadGraphData(parseInt(e.target.value));
         });
 
         document.getElementById('typeFilter').addEventListener('change', () => {
             if (currentData) renderGraph(currentData);
+            document.querySelectorAll('.legend-item').forEach(i => {
+                i.classList.toggle('active', i.dataset.type === document.getElementById('typeFilter').value);
+            });
+        });
+
+        document.getElementById('layoutSelect').addEventListener('change', () => {
+            if (currentData) renderGraph(currentData);
+        });
+
+        // Click on background to deselect
+        svg.on('click', () => {
+            selectedNode = null;
+            d3.selectAll('.node').classed('highlighted', false).classed('dimmed', false);
+            d3.selectAll('.link').classed('highlighted', false);
         });
 
         // Initial load
