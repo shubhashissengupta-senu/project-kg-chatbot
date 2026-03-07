@@ -76,6 +76,41 @@
             color: #667eea;
             margin-top: 4px;
         }
+        .milestone-markers {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 8px;
+            padding: 0 4px;
+            font-size: 10px;
+        }
+        .milestone-marker {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            cursor: pointer;
+            padding: 4px;
+            border-radius: 4px;
+            transition: background 0.2s;
+        }
+        .milestone-marker:hover {
+            background: rgba(102,126,234,0.3);
+        }
+        .milestone-marker.active {
+            background: rgba(102,126,234,0.4);
+        }
+        .milestone-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-bottom: 2px;
+        }
+        .milestone-dot.client { background: #feca57; }
+        .milestone-dot.qa { background: #4ecdc4; }
+        .milestone-dot.scrum { background: #667eea; }
+        .milestone-label {
+            color: #888;
+            white-space: nowrap;
+        }
         .graph-container { flex: 1; position: relative; overflow: hidden; }
         #graph { width: 100%; height: 100%; }
         .node circle { stroke: #fff; stroke-width: 2px; cursor: pointer; }
@@ -83,13 +118,17 @@
         .link { stroke: rgba(255,255,255,0.3); stroke-width: 1px; }
         .tooltip {
             position: absolute;
-            background: rgba(0,0,0,0.9);
+            background: rgba(0,0,0,0.95);
             padding: 12px 16px;
             border-radius: 8px;
             font-size: 13px;
             pointer-events: none;
-            max-width: 300px;
+            max-width: 400px;
+            max-height: 300px;
+            overflow-y: auto;
             z-index: 100;
+            border: 1px solid rgba(255,255,255,0.1);
+            line-height: 1.5;
         }
         .legend {
             position: absolute;
@@ -143,6 +182,7 @@
                 <label>Time Travel: <span id="timeLabel">Current</span></label>
                 <input type="range" id="timeSlider" min="0" max="20" value="20">
                 <div class="snapshot-label" id="snapshotInfo">Use slider to view graph at different points in time</div>
+                <div class="milestone-markers" id="milestoneMarkers"></div>
             </div>
             <div class="control-group">
                 <label>Filter by Type</label>
@@ -225,6 +265,7 @@
                 document.getElementById('loading').style.display = 'none';
 
                 populateTypeFilter(data.nodes || []);
+                renderMilestoneMarkers();
                 renderGraph(data);
                 updateTimeLabel();
             } catch (err) {
@@ -246,6 +287,70 @@
                 document.getElementById('timeLabel').textContent = 'Current';
                 document.getElementById('snapshotInfo').textContent = 'Latest state';
             }
+        }
+
+        // Key milestone dates for the project
+        const milestones = [
+            { date: '2025-12-01', label: 'Project Start', type: 'scrum' },
+            { date: '2025-12-18', label: 'Client Review 1', type: 'client' },
+            { date: '2025-12-19', label: 'QA Review 1', type: 'qa' },
+            { date: '2026-01-16', label: 'QA Review 2', type: 'qa' },
+            { date: '2026-01-20', label: 'Client Review 2', type: 'client' },
+            { date: '2026-02-13', label: 'QA Review 3', type: 'qa' },
+            { date: '2026-02-20', label: 'Client Review 3', type: 'client' },
+            { date: '2026-03-07', label: 'Current', type: 'scrum' }
+        ];
+
+        function renderMilestoneMarkers() {
+            const container = document.getElementById('milestoneMarkers');
+            if (!allSnapshots.length) {
+                container.innerHTML = '';
+                return;
+            }
+
+            // Find snapshot indices that match milestone dates
+            const markerHtml = milestones.map(m => {
+                // Find closest snapshot to this date
+                let closestIndex = -1;
+                let closestDiff = Infinity;
+
+                allSnapshots.forEach((snap, idx) => {
+                    if (snap.timestamp) {
+                        const snapDate = snap.timestamp.split('T')[0];
+                        const mDate = m.date;
+                        const diff = Math.abs(new Date(snapDate) - new Date(mDate));
+                        if (diff < closestDiff) {
+                            closestDiff = diff;
+                            closestIndex = idx;
+                        }
+                    }
+                });
+
+                // Only show if within 3 days of a snapshot
+                if (closestIndex >= 0 && closestDiff <= 3 * 24 * 60 * 60 * 1000) {
+                    return `<div class="milestone-marker" data-index="${closestIndex}" title="${m.label} (${m.date})">
+                        <div class="milestone-dot ${m.type}"></div>
+                        <span class="milestone-label">${m.label}</span>
+                    </div>`;
+                }
+                return '';
+            }).filter(h => h).join('');
+
+            container.innerHTML = markerHtml;
+
+            // Add click handlers
+            container.querySelectorAll('.milestone-marker').forEach(marker => {
+                marker.addEventListener('click', () => {
+                    const index = parseInt(marker.dataset.index);
+                    document.getElementById('timeSlider').value = index;
+                    updateTimeLabel();
+                    loadGraphData(index);
+
+                    // Highlight active marker
+                    container.querySelectorAll('.milestone-marker').forEach(m => m.classList.remove('active'));
+                    marker.classList.add('active');
+                });
+            });
         }
 
         function populateTypeFilter(nodes) {
@@ -327,11 +432,13 @@
                 .attr('fill', d => colors[d.type] || colors.default)
                 .on('mouseover', (e, d) => {
                     const tooltip = document.getElementById('tooltip');
-                    let content = `<strong>${d.label}</strong><br>Type: ${d.type}`;
+                    let content = `<strong>${d.label}</strong><br><span style="color:#888">Type:</span> ${d.type}`;
                     if (d.data) {
-                        for (const [key, value] of Object.entries(d.data).slice(0, 5)) {
-                            if (value && key !== 'entity_type') {
-                                content += `<br>${key}: ${value}`;
+                        const skipKeys = ['entity_type', 'name', 'label'];
+                        for (const [key, value] of Object.entries(d.data)) {
+                            if (value && !skipKeys.includes(key)) {
+                                const displayKey = key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+                                content += `<br><span style="color:#888">${displayKey}:</span> ${value}`;
                             }
                         }
                     }

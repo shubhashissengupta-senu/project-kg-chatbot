@@ -364,7 +364,7 @@ async def get_graph_data(request: Request, session_id: str, snapshot_index: int 
             'id': node_id,
             'label': str(node_label)[:30],
             'type': node_type,
-            'data': {k: str(v)[:100] if v else '' for k, v in node_data.items() if k not in ['entity_type']}
+            'data': {k: str(v) if v is not None else '' for k, v in node_data.items() if k not in ['entity_type']}
         })
 
     edges = []
