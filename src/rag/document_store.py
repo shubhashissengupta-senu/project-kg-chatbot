@@ -76,8 +76,11 @@ class DocumentStore:
         # Extract date from filename if present
         date = self._extract_date(file_path.stem)
 
+        # Extract document type for RBAC filtering
+        doc_type = self._extract_document_type(file_path.stem)
+
         # Chunk the document
-        chunks = self._chunk_document(content, str(file_path), title, date)
+        chunks = self._chunk_document(content, str(file_path), title, date, doc_type)
         self.chunks.extend(chunks)
 
         return chunks
@@ -89,6 +92,25 @@ class DocumentStore:
         if match:
             return match.group(1).strip()
         return default.replace('_', ' ').title()
+
+    def _extract_document_type(self, filename: str) -> str:
+        """Extract document type from filename for RBAC filtering"""
+        filename_lower = filename.lower()
+
+        if 'scrum' in filename_lower or 'sprint' in filename_lower:
+            return 'Scrum'
+        elif 'client_review' in filename_lower or 'client-review' in filename_lower:
+            return 'ClientReview'
+        elif 'qa_review' in filename_lower or 'qa-review' in filename_lower:
+            return 'QAReview'
+        elif 'finance' in filename_lower or 'financial' in filename_lower:
+            return 'FinanceReview'
+        elif 'delivery_review' in filename_lower or 'delivery-review' in filename_lower:
+            return 'DeliveryReview'
+        elif 'developer' in filename_lower or 'metric' in filename_lower:
+            return 'DeveloperMetrics'
+        else:
+            return 'General'
 
     def _extract_date(self, filename: str) -> Optional[datetime]:
         """Extract date from filename"""
@@ -122,7 +144,8 @@ class DocumentStore:
         return None
 
     def _chunk_document(self, content: str, source_file: str,
-                        title: str, date: Optional[datetime]) -> List[DocumentChunk]:
+                        title: str, date: Optional[datetime],
+                        doc_type: str = 'General') -> List[DocumentChunk]:
         """Split document into chunks"""
         chunks = []
 
@@ -144,6 +167,7 @@ class DocumentStore:
 
                 metadata = {
                     'section': section_title,
+                    'document_type': doc_type,  # For RBAC filtering
                 }
                 if date:
                     metadata['date'] = date.isoformat()

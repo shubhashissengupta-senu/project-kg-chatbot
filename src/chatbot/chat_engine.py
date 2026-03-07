@@ -111,12 +111,13 @@ class ChatEngine:
         self.query_planner = QueryPlanner()
         self.context = ConversationContext()
 
-    def chat(self, user_message: str) -> ChatResponse:
+    def chat(self, user_message: str, allowed_doc_types: List[str] = None) -> ChatResponse:
         """
         Process user message and generate response.
 
         Args:
             user_message: User's natural language query
+            allowed_doc_types: List of document types user can access (for RBAC)
 
         Returns:
             ChatResponse with answer and metadata
@@ -142,7 +143,7 @@ class ChatEngine:
             # Step 4: If response is poor and RAG is available, try RAG
             if self.rag_engine and self._should_use_rag(response):
                 logger.info("Falling back to RAG for better response")
-                rag_response = self._query_rag(user_message)
+                rag_response = self._query_rag(user_message, allowed_doc_types)
                 if rag_response and rag_response.confidence > response.confidence:
                     response = ChatResponse(
                         answer=rag_response.answer,
@@ -168,7 +169,7 @@ class ChatEngine:
             # Try RAG as last resort
             if self.rag_engine:
                 try:
-                    rag_response = self._query_rag(user_message)
+                    rag_response = self._query_rag(user_message, allowed_doc_types)
                     if rag_response and rag_response.confidence > 0.1:
                         return ChatResponse(
                             answer=rag_response.answer,
@@ -620,12 +621,12 @@ class ChatEngine:
             return True
         return False
 
-    def _query_rag(self, query: str) -> Optional[Any]:
-        """Query the RAG engine"""
+    def _query_rag(self, query: str, allowed_doc_types: List[str] = None) -> Optional[Any]:
+        """Query the RAG engine with RBAC filtering"""
         if not self.rag_engine:
             return None
         try:
-            return self.rag_engine.query(query, top_k=5)
+            return self.rag_engine.query(query, top_k=5, allowed_doc_types=allowed_doc_types)
         except Exception as e:
             logger.error(f"RAG query failed: {e}")
             return None

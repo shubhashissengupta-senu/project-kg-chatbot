@@ -205,9 +205,9 @@ class AccessController:
         permissions = session.user.role.permissions
 
         if Permission.VIEW_ALL in permissions:
-            return ["Scrum", "ClientReview", "QAReview", "FinanceReview", "DeliveryReview"]
+            return ["Scrum", "ClientReview", "QAReview", "FinanceReview", "DeliveryReview", "DeveloperMetrics", "General"]
 
-        allowed = []
+        allowed = ["General"]  # General documents always accessible
 
         if Permission.VIEW_SCRUM in permissions:
             allowed.append("Scrum")
@@ -219,5 +219,16 @@ class AccessController:
             allowed.append("FinanceReview")
         if Permission.VIEW_DELIVERY_REVIEWS in permissions:
             allowed.append("DeliveryReview")
+        if Permission.VIEW_PRODUCTIVITY_METRICS in permissions:
+            allowed.append("DeveloperMetrics")
 
         return allowed
+
+    def filter_rag_chunks(self, session: UserSession, chunks: List[Any]) -> List[Any]:
+        """Filter RAG chunks based on user document access permissions"""
+        allowed_types = self.get_allowed_document_types(session)
+
+        return [
+            chunk for chunk in chunks
+            if chunk.chunk.metadata.get('document_type', 'General') in allowed_types
+        ]

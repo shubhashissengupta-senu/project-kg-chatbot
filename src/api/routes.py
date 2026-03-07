@@ -151,21 +151,40 @@ async def send_message(request: Request, chat_data: ChatRequest):
     if not session:
         raise HTTPException(status_code=401, detail="Invalid session")
 
-    # Process message
-    response = state.chat_engine.chat(chat_data.message)
-
-    # Filter response based on user permissions
+    # Set up RBAC filtering
     from ..auth.access_control import AccessController
     access_controller = AccessController()
     data_filter = access_controller.create_filter(session)
+    allowed_doc_types = access_controller.get_allowed_document_types(session)
 
+    # Process message with session context for RAG filtering
+    response = state.chat_engine.chat(chat_data.message, allowed_doc_types=allowed_doc_types)
+
+    # Filter response data based on user permissions
     filtered_data = data_filter.filter_project_state(response.data) if response.data else {}
 
+    # Filter sources based on document type permissions
+    filtered_sources = []
+    for source in response.sources:
+        doc_type = source.get('document_type', 'General')
+        if doc_type in allowed_doc_types:
+            filtered_sources.append(source)
+
+    # Check if answer contains financial data that should be hidden
+    answer = response.answer
+    from ..auth.roles import Permission
+    if Permission.VIEW_FINANCIAL_METRICS not in session.user.role.permissions and Permission.VIEW_ALL not in session.user.role.permissions:
+        # Redact financial information from answer
+        import re
+        # Redact dollar amounts, percentages related to budget/cost/margin
+        answer = re.sub(r'\$[\d,]+(?:\.\d{2})?', '[REDACTED]', answer)
+        answer = re.sub(r'(?:budget|cost|margin|revenue|cpi)\s*[:\s]+[\d.,]+%?', '[FINANCIAL DATA RESTRICTED]', answer, flags=re.IGNORECASE)
+
     return ChatResponse(
-        answer=response.answer,
+        answer=answer,
         query_type=response.query_type,
         data=filtered_data,
-        sources=response.sources,
+        sources=filtered_sources,
         follow_up_questions=response.follow_up_questions,
         confidence=response.confidence
     )
@@ -354,26 +373,55 @@ async def get_graph_data(request: Request, session_id: str, snapshot_index: int 
         graph = state.kg_builder.get_graph().graph
         label = "Current State"
 
-    # Extract nodes and edges
+    # Create data filter for RBAC
+    from ..auth.access_control import DataFilter
+    from ..auth.roles import Permission
+    data_filter = DataFilter(session)
+
+    # Financial attributes to hide from non-financial users
+    financial_attrs = {'budget', 'cost', 'value', 'margin', 'revenue', 'cpi', 'actual_cost', 'planned_cost'}
+
+    # Extract nodes and edges with RBAC filtering
     nodes = []
+    visible_node_ids = set()
+
     for node_id in graph.nodes():
         node_data = dict(graph.nodes[node_id])
         node_type = node_data.get('entity_type', 'Unknown')
+
+        # Check if user can view this entity type
+        if not data_filter.can_view_entity(node_type, node_data):
+            continue
+
         node_label = node_data.get('name', node_data.get('label', node_id))
+
+        # Filter node attributes based on permissions
+        filtered_data = {}
+        for k, v in node_data.items():
+            if k == 'entity_type':
+                continue
+            # Hide financial attributes if user doesn't have permission
+            if k.lower() in financial_attrs and not data_filter.has_permission(Permission.VIEW_FINANCIAL_METRICS):
+                continue
+            filtered_data[k] = str(v) if v is not None else ''
+
         nodes.append({
             'id': node_id,
             'label': str(node_label)[:30],
             'type': node_type,
-            'data': {k: str(v) if v is not None else '' for k, v in node_data.items() if k not in ['entity_type']}
+            'data': filtered_data
         })
+        visible_node_ids.add(node_id)
 
+    # Only include edges between visible nodes
     edges = []
     for source, target, data in graph.edges(data=True):
-        edges.append({
-            'source': source,
-            'target': target,
-            'type': data.get('relation_type', 'RELATED')
-        })
+        if source in visible_node_ids and target in visible_node_ids:
+            edges.append({
+                'source': source,
+                'target': target,
+                'type': data.get('relation_type', 'RELATED')
+            })
 
     return {
         'nodes': nodes,

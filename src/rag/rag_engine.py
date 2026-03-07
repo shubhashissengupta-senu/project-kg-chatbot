@@ -42,13 +42,14 @@ class RAGEngine:
         self.is_initialized = True
         return count
 
-    def query(self, question: str, top_k: int = 5) -> RAGResponse:
+    def query(self, question: str, top_k: int = 5, allowed_doc_types: List[str] = None) -> RAGResponse:
         """
         Answer a question using RAG.
 
         Args:
             question: User's question
             top_k: Number of chunks to retrieve
+            allowed_doc_types: List of document types user can access (for RBAC)
 
         Returns:
             RAGResponse with answer and sources
@@ -62,7 +63,17 @@ class RAGEngine:
             )
 
         # Retrieve relevant chunks
-        results = self.retriever.retrieve(question, top_k=top_k)
+        results = self.retriever.retrieve(question, top_k=top_k * 2)  # Get more to filter
+
+        # Apply RBAC filtering if allowed_doc_types is specified
+        if allowed_doc_types:
+            results = [
+                r for r in results
+                if r.chunk.metadata.get('document_type', 'General') in allowed_doc_types
+            ]
+
+        # Limit to top_k after filtering
+        results = results[:top_k]
 
         if not results:
             return RAGResponse(
@@ -184,6 +195,7 @@ class RAGEngine:
                 'file': result.chunk.source_file,
                 'section': result.chunk.metadata.get('section', ''),
                 'date': result.chunk.metadata.get('date_str', ''),
+                'document_type': result.chunk.metadata.get('document_type', 'General'),
                 'relevance': round(result.score, 3)
             })
 
