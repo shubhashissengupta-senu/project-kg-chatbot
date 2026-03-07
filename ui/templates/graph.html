@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Knowledge Graph - Project KG</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0f0f1a;
+            color: #fff;
+            height: 100vh;
+            display: flex;
+        }
+        .sidebar {
+            width: 250px;
+            background: #1a1a2e;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+        }
+        .logo { font-size: 24px; font-weight: bold; margin-bottom: 30px; }
+        .nav-item {
+            padding: 12px 16px;
+            margin-bottom: 8px;
+            border-radius: 8px;
+            cursor: pointer;
+            text-decoration: none;
+            color: #aaa;
+            display: block;
+        }
+        .nav-item:hover, .nav-item.active { background: rgba(102,126,234,0.2); color: #fff; }
+        .user-info {
+            margin-top: auto;
+            padding: 16px;
+            background: rgba(255,255,255,0.05);
+            border-radius: 8px;
+        }
+        .main { flex: 1; display: flex; flex-direction: column; }
+        .header {
+            padding: 20px 30px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .controls {
+            padding: 20px 30px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            display: flex;
+            gap: 20px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .control-group { display: flex; flex-direction: column; gap: 4px; }
+        .control-group label { font-size: 12px; color: #888; }
+        .control-group select, .control-group input {
+            padding: 8px 12px;
+            background: rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 6px;
+            color: #fff;
+        }
+        .time-control {
+            flex: 1;
+            min-width: 300px;
+        }
+        .time-control input[type="range"] {
+            width: 100%;
+        }
+        .snapshot-label {
+            text-align: center;
+            font-size: 14px;
+            color: #667eea;
+            margin-top: 4px;
+        }
+        .graph-container { flex: 1; position: relative; overflow: hidden; }
+        #graph { width: 100%; height: 100%; }
+        .node circle { stroke: #fff; stroke-width: 2px; cursor: pointer; }
+        .node text { font-size: 10px; fill: #fff; pointer-events: none; }
+        .link { stroke: rgba(255,255,255,0.3); stroke-width: 1px; }
+        .tooltip {
+            position: absolute;
+            background: rgba(0,0,0,0.9);
+            padding: 12px 16px;
+            border-radius: 8px;
+            font-size: 13px;
+            pointer-events: none;
+            max-width: 300px;
+            z-index: 100;
+        }
+        .legend {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            background: rgba(0,0,0,0.7);
+            padding: 16px;
+            border-radius: 8px;
+        }
+        .legend-item { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 12px; }
+        .legend-color { width: 12px; height: 12px; border-radius: 50%; }
+        .stats {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(0,0,0,0.7);
+            padding: 16px;
+            border-radius: 8px;
+            font-size: 13px;
+        }
+        .loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 18px;
+            color: #888;
+        }
+    </style>
+</head>
+<body>
+    <div class="sidebar">
+        <div class="logo">Project KG</div>
+        <a href="/chat" class="nav-item">Chat</a>
+        <a href="/graph" class="nav-item active">Knowledge Graph</a>
+        <a href="/dashboard" class="nav-item">Dashboard</a>
+        <a href="/simulation" class="nav-item">Simulation</a>
+        <div class="user-info">
+            <div id="userName">User</div>
+            <div style="font-size:12px;color:#888" id="userRole">Role</div>
+            <a href="/login" style="color:#667eea;font-size:12px;margin-top:8px;display:block;">Logout</a>
+        </div>
+    </div>
+    <div class="main">
+        <div class="header">
+            <h2>Knowledge Graph</h2>
+            <span id="snapshotLabel">Loading...</span>
+        </div>
+        <div class="controls">
+            <div class="control-group time-control">
+                <label>Time Travel: <span id="timeLabel">Current</span></label>
+                <input type="range" id="timeSlider" min="0" max="20" value="20">
+                <div class="snapshot-label" id="snapshotInfo">Use slider to view graph at different points in time</div>
+            </div>
+            <div class="control-group">
+                <label>Filter by Type</label>
+                <select id="typeFilter">
+                    <option value="all">All Types</option>
+                    <option value="Person">People</option>
+                    <option value="Stream">Streams</option>
+                    <option value="Risk">Risks</option>
+                    <option value="Milestone">Milestones</option>
+                    <option value="ChangeRequest">Change Requests</option>
+                    <option value="Task">Tasks</option>
+                </select>
+            </div>
+        </div>
+        <div class="graph-container">
+            <div class="loading" id="loading">Loading graph data...</div>
+            <svg id="graph"></svg>
+            <div class="legend" id="legend"></div>
+            <div class="stats" id="stats"></div>
+            <div class="tooltip" id="tooltip" style="display:none;"></div>
+        </div>
+    </div>
+
+    <script>
+        const sessionId = localStorage.getItem('session_id');
+        const user = JSON.parse(localStorage.getItem('user') || '{}');
+        if (!sessionId) window.location.href = '/login';
+
+        document.getElementById('userName').textContent = user.username || 'User';
+        document.getElementById('userRole').textContent = user.role?.name || 'Unknown';
+
+        const colors = {
+            Person: '#667eea',
+            Stream: '#f093fb',
+            Risk: '#ff6b6b',
+            Milestone: '#4ecdc4',
+            ChangeRequest: '#feca57',
+            Task: '#54a0ff',
+            Meeting: '#5f27cd',
+            Project: '#00d2d3',
+            MetricSnapshot: '#a55eea',
+            default: '#888'
+        };
+
+        let currentData = null;
+        let allSnapshots = [];
+        let simulation = null;
+
+        const container = document.querySelector('.graph-container');
+        const width = container.clientWidth || 800;
+        const height = container.clientHeight || 600;
+
+        const svg = d3.select('#graph')
+            .attr('width', '100%')
+            .attr('height', '100%')
+            .attr('viewBox', [0, 0, width, height]);
+
+        const g = svg.append('g');
+
+        svg.call(d3.zoom().on('zoom', (e) => g.attr('transform', e.transform)));
+
+        async function loadGraphData(snapshotIndex = null) {
+            document.getElementById('loading').style.display = 'block';
+
+            try {
+                let url = `/api/graph/data?session_id=${sessionId}`;
+                if (snapshotIndex !== null) {
+                    url += `&snapshot_index=${snapshotIndex}`;
+                }
+
+                const response = await fetch(url);
+                if (!response.ok) throw new Error('Failed to load graph data');
+
+                const data = await response.json();
+                currentData = data;
+                allSnapshots = data.snapshots || [];
+
+                // Update slider
+                const slider = document.getElementById('timeSlider');
+                slider.max = Math.max(0, allSnapshots.length - 1);
+                if (snapshotIndex === null) {
+                    slider.value = slider.max;
+                }
+
+                document.getElementById('snapshotLabel').textContent = data.current_label;
+                document.getElementById('loading').style.display = 'none';
+
+                renderGraph(data);
+                updateTimeLabel();
+            } catch (err) {
+                console.error('Error loading graph:', err);
+                document.getElementById('loading').textContent = 'Error loading graph data. Please refresh.';
+            }
+        }
+
+        function updateTimeLabel() {
+            const slider = document.getElementById('timeSlider');
+            const index = parseInt(slider.value);
+
+            if (allSnapshots.length > 0 && index < allSnapshots.length) {
+                const snapshot = allSnapshots[index];
+                document.getElementById('timeLabel').textContent = snapshot.label;
+                document.getElementById('snapshotInfo').textContent =
+                    snapshot.timestamp ? new Date(snapshot.timestamp).toLocaleDateString() : snapshot.label;
+            } else {
+                document.getElementById('timeLabel').textContent = 'Current';
+                document.getElementById('snapshotInfo').textContent = 'Latest state';
+            }
+        }
+
+        function renderGraph(data) {
+            g.selectAll('*').remove();
+
+            let nodes = data.nodes || [];
+            let links = data.edges || [];
+
+            // Apply type filter
+            const typeFilter = document.getElementById('typeFilter').value;
+            if (typeFilter !== 'all') {
+                const nodeIds = new Set(nodes.filter(n => n.type === typeFilter).map(n => n.id));
+                nodes = nodes.filter(n => n.type === typeFilter);
+                links = links.filter(l => nodeIds.has(l.source) || nodeIds.has(l.target));
+            }
+
+            // Limit nodes for performance
+            if (nodes.length > 100) {
+                nodes = nodes.slice(0, 100);
+                const nodeIds = new Set(nodes.map(n => n.id));
+                links = links.filter(l => nodeIds.has(l.source) && nodeIds.has(l.target));
+            }
+
+            if (simulation) simulation.stop();
+
+            simulation = d3.forceSimulation(nodes)
+                .force('link', d3.forceLink(links).id(d => d.id).distance(80))
+                .force('charge', d3.forceManyBody().strength(-200))
+                .force('center', d3.forceCenter(width / 2, height / 2))
+                .force('collision', d3.forceCollide().radius(30));
+
+            const link = g.append('g')
+                .selectAll('line')
+                .data(links)
+                .join('line')
+                .attr('class', 'link');
+
+            const node = g.append('g')
+                .selectAll('g')
+                .data(nodes)
+                .join('g')
+                .attr('class', 'node')
+                .call(d3.drag()
+                    .on('start', (e, d) => { if (!e.active) simulation.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; })
+                    .on('drag', (e, d) => { d.fx = e.x; d.fy = e.y; })
+                    .on('end', (e, d) => { if (!e.active) simulation.alphaTarget(0); d.fx = null; d.fy = null; }));
+
+            node.append('circle')
+                .attr('r', d => d.type === 'Project' ? 20 : d.type === 'Stream' ? 15 : 10)
+                .attr('fill', d => colors[d.type] || colors.default)
+                .on('mouseover', (e, d) => {
+                    const tooltip = document.getElementById('tooltip');
+                    let content = `<strong>${d.label}</strong><br>Type: ${d.type}`;
+                    if (d.data) {
+                        for (const [key, value] of Object.entries(d.data).slice(0, 5)) {
+                            if (value && key !== 'entity_type') {
+                                content += `<br>${key}: ${value}`;
+                            }
+                        }
+                    }
+                    tooltip.innerHTML = content;
+                    tooltip.style.display = 'block';
+                    tooltip.style.left = (e.pageX + 10) + 'px';
+                    tooltip.style.top = (e.pageY + 10) + 'px';
+                })
+                .on('mouseout', () => document.getElementById('tooltip').style.display = 'none');
+
+            node.append('text')
+                .text(d => d.label)
+                .attr('dy', 20)
+                .attr('text-anchor', 'middle')
+                .attr('font-size', '9px');
+
+            simulation.on('tick', () => {
+                link.attr('x1', d => d.source.x).attr('y1', d => d.source.y)
+                    .attr('x2', d => d.target.x).attr('y2', d => d.target.y);
+                node.attr('transform', d => `translate(${d.x},${d.y})`);
+            });
+
+            // Update stats
+            document.getElementById('stats').innerHTML = `
+                <div><strong>Nodes:</strong> ${nodes.length}</div>
+                <div><strong>Edges:</strong> ${links.length}</div>
+                <div><strong>Snapshots:</strong> ${allSnapshots.length}</div>
+            `;
+
+            // Update legend
+            const types = [...new Set(nodes.map(n => n.type))];
+            document.getElementById('legend').innerHTML = types.map(t =>
+                `<div class="legend-item"><div class="legend-color" style="background:${colors[t] || colors.default}"></div>${t}</div>`
+            ).join('');
+        }
+
+        // Event listeners
+        document.getElementById('timeSlider').addEventListener('input', (e) => {
+            updateTimeLabel();
+        });
+
+        document.getElementById('timeSlider').addEventListener('change', (e) => {
+            const index = parseInt(e.target.value);
+            loadGraphData(index);
+        });
+
+        document.getElementById('typeFilter').addEventListener('change', () => {
+            if (currentData) renderGraph(currentData);
+        });
+
+        // Initial load
+        loadGraphData();
+    </script>
+</body>
+</html>

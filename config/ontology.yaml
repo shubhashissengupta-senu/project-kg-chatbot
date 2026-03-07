@@ -1,0 +1,428 @@
+# Knowledge Graph Ontology Schema
+# ABC Inc. SAP S/4HANA Migration Project
+
+version: "1.0"
+name: "ProjectKGOntology"
+
+# =============================================================================
+# NODE TYPES (Entities)
+# =============================================================================
+nodes:
+
+  # ---------------------------------------------------------------------------
+  # Core Project Entities
+  # ---------------------------------------------------------------------------
+
+  Project:
+    description: "The overall project being tracked"
+    properties:
+      name: { type: string, required: true }
+      client: { type: string, required: true }
+      vendor: { type: string }
+      contract_type: { type: enum, values: [FixedPrice, TimeAndMaterial] }
+      start_date: { type: date, required: true }
+      end_date: { type: date }
+      budget: { type: decimal }
+      status: { type: enum, values: [Green, Amber, Red] }
+    temporal: false
+
+  Stream:
+    description: "A workstream or module within the project"
+    properties:
+      name: { type: string, required: true }
+      module: { type: enum, values: [SD, EWM] }
+      description: { type: string }
+      status: { type: enum, values: [Green, Amber, Red] }
+      completion_pct: { type: decimal }
+      uat_date: { type: date }
+      go_live_date: { type: date }
+    temporal: true
+
+  Sprint:
+    description: "A development sprint/iteration"
+    properties:
+      number: { type: integer, required: true }
+      start_date: { type: date, required: true }
+      end_date: { type: date, required: true }
+      velocity_planned: { type: integer }
+      velocity_actual: { type: integer }
+      status: { type: enum, values: [Planning, Active, Complete] }
+    temporal: false
+
+  # ---------------------------------------------------------------------------
+  # People Entities
+  # ---------------------------------------------------------------------------
+
+  Person:
+    description: "A team member or stakeholder"
+    properties:
+      name: { type: string, required: true }
+      role: { type: string }
+      title: { type: string }
+      organization: { type: enum, values: [Accenture, ABCInc, Consultant] }
+      stream: { type: string_array }
+      status: { type: enum, values: [Active, OnLeave, Departed, Consultant] }
+      join_date: { type: date }
+      departure_date: { type: date }
+      location: { type: string }
+    temporal: true
+
+  # ---------------------------------------------------------------------------
+  # Meeting Entities
+  # ---------------------------------------------------------------------------
+
+  Meeting:
+    description: "A project meeting or review"
+    properties:
+      meeting_type: { type: enum, values: [Scrum, ClientReview, QAReview, FinanceReview, DeliveryReview] }
+      date: { type: datetime, required: true }
+      week_number: { type: integer }
+      sprint_number: { type: integer }
+      attendees: { type: string_array }
+      key_topics: { type: string_array }
+      decisions: { type: string_array }
+      stream1_status: { type: string }
+      stream2_status: { type: string }
+    temporal: false
+
+  # ---------------------------------------------------------------------------
+  # Work Item Entities
+  # ---------------------------------------------------------------------------
+
+  Task:
+    description: "A development or project task"
+    properties:
+      task_id: { type: string, required: true }
+      description: { type: string, required: true }
+      stream: { type: enum, values: [SD, EWM, Integration, UI] }
+      status: { type: enum, values: [NotStarted, InProgress, Complete, Blocked, Deferred] }
+      assignee: { type: string }
+      target_date: { type: date }
+      completion_date: { type: date }
+      story_points: { type: integer }
+    temporal: true
+
+  Defect:
+    description: "A bug or defect"
+    properties:
+      defect_id: { type: string, required: true }
+      description: { type: string, required: true }
+      severity: { type: enum, values: [Low, Medium, High, Critical] }
+      status: { type: enum, values: [Open, InProgress, Resolved, Closed, Deferred] }
+      stream: { type: enum, values: [SD, EWM] }
+      assignee: { type: string }
+      found_date: { type: date }
+      resolved_date: { type: date }
+    temporal: true
+
+  # ---------------------------------------------------------------------------
+  # Risk & Change Entities
+  # ---------------------------------------------------------------------------
+
+  Risk:
+    description: "A project risk"
+    properties:
+      risk_id: { type: string, required: true }
+      description: { type: string, required: true }
+      probability: { type: enum, values: [Low, Medium, High] }
+      impact: { type: enum, values: [Low, Medium, High] }
+      status: { type: enum, values: [Open, Mitigating, Closed, Materialized] }
+      owner: { type: string }
+      mitigation: { type: string }
+      identified_date: { type: date }
+      closed_date: { type: date }
+    temporal: true
+
+  ChangeRequest:
+    description: "A change request or scope addition"
+    properties:
+      cr_id: { type: string, required: true }
+      description: { type: string, required: true }
+      value: { type: decimal }
+      margin: { type: decimal }
+      status: { type: enum, values: [Raised, UnderReview, Approved, Rejected, InProgress, Complete] }
+      raised_date: { type: date }
+      approved_date: { type: date }
+      impact_weeks: { type: decimal }
+      stream: { type: enum, values: [SD, EWM, Both] }
+    temporal: true
+
+  ActionItem:
+    description: "An action item from a meeting"
+    properties:
+      action_id: { type: string, required: true }
+      description: { type: string, required: true }
+      owner: { type: string }
+      due_date: { type: date }
+      status: { type: enum, values: [Open, InProgress, Complete, Overdue] }
+      source_meeting: { type: string }
+    temporal: true
+
+  # ---------------------------------------------------------------------------
+  # Milestone Entity
+  # ---------------------------------------------------------------------------
+
+  Milestone:
+    description: "A project milestone"
+    properties:
+      name: { type: string, required: true }
+      target_date: { type: date, required: true }
+      actual_date: { type: date }
+      status: { type: enum, values: [Pending, OnTrack, AtRisk, Complete, Delayed] }
+      variance_days: { type: integer }
+    temporal: true
+
+  # ---------------------------------------------------------------------------
+  # Metric Snapshot Entity
+  # ---------------------------------------------------------------------------
+
+  MetricSnapshot:
+    description: "A time-stamped metric value"
+    properties:
+      metric_name: { type: string, required: true }
+      timestamp: { type: datetime, required: true }
+      value: { type: decimal, required: true }
+      unit: { type: string }
+      entity_type: { type: string }  # What entity this metric relates to
+      entity_id: { type: string }
+    temporal: false  # The entity itself represents a point in time
+
+  # ---------------------------------------------------------------------------
+  # Event Entity (for significant occurrences)
+  # ---------------------------------------------------------------------------
+
+  Event:
+    description: "A significant project event"
+    properties:
+      event_type: { type: enum, values: [ResourceJoin, ResourceDepart, StatusChange, MilestoneReached, RiskMaterialized, CRApproved, Escalation] }
+      date: { type: datetime, required: true }
+      description: { type: string, required: true }
+      impact: { type: enum, values: [Low, Medium, High] }
+      related_entities: { type: string_array }
+    temporal: false
+
+# =============================================================================
+# EDGE TYPES (Relationships)
+# =============================================================================
+edges:
+
+  # ---------------------------------------------------------------------------
+  # Person Relationships
+  # ---------------------------------------------------------------------------
+
+  WORKS_ON:
+    from: Person
+    to: Stream
+    properties:
+      role: { type: string }
+      allocation_pct: { type: decimal }
+      start_date: { type: date }
+      end_date: { type: date }
+    temporal: true
+
+  ASSIGNED_TO:
+    from: Person
+    to: [Task, Defect, ActionItem]
+    properties:
+      assigned_date: { type: date }
+    temporal: true
+
+  OWNS:
+    from: Person
+    to: [Risk, ChangeRequest]
+    temporal: true
+
+  MENTORS:
+    from: Person
+    to: Person
+    properties:
+      focus_area: { type: string }
+      start_date: { type: date }
+      end_date: { type: date }
+    temporal: true
+
+  REPLACED_BY:
+    from: Person
+    to: Person
+    properties:
+      effective_date: { type: date }
+      handover_complete: { type: boolean }
+    temporal: false
+
+  REPORTS_TO:
+    from: Person
+    to: Person
+    temporal: true
+
+  ATTENDED:
+    from: Person
+    to: Meeting
+    properties:
+      role_in_meeting: { type: string }
+    temporal: false
+
+  # ---------------------------------------------------------------------------
+  # Project Structure Relationships
+  # ---------------------------------------------------------------------------
+
+  CONTAINS:
+    from: [Project, Stream, Sprint]
+    to: [Stream, Task, Defect]
+    temporal: false
+
+  PART_OF:
+    from: [Task, Defect, ChangeRequest]
+    to: [Stream, Sprint]
+    temporal: false
+
+  # ---------------------------------------------------------------------------
+  # Impact & Causation Relationships
+  # ---------------------------------------------------------------------------
+
+  AFFECTS:
+    from: [Risk, ChangeRequest, Event]
+    to: [Stream, Milestone, Task]
+    properties:
+      impact_type: { type: string }
+      severity: { type: enum, values: [Low, Medium, High] }
+    temporal: false
+
+  CAUSED_BY:
+    from: [Risk, Defect, Event]
+    to: [Event, Task, Person]
+    properties:
+      causation_type: { type: string }
+    temporal: false
+
+  MITIGATED_BY:
+    from: Risk
+    to: [Person, Task, ChangeRequest]
+    properties:
+      effectiveness: { type: enum, values: [Partial, Full] }
+    temporal: false
+
+  BLOCKS:
+    from: [Task, Defect, Risk]
+    to: [Task, Milestone]
+    temporal: true
+
+  DEPENDS_ON:
+    from: Task
+    to: Task
+    temporal: false
+
+  # ---------------------------------------------------------------------------
+  # Discussion & Decision Relationships
+  # ---------------------------------------------------------------------------
+
+  DISCUSSED_IN:
+    from: [Risk, ChangeRequest, Defect, Task, Milestone]
+    to: Meeting
+    properties:
+      outcome: { type: string }
+    temporal: false
+
+  DECIDED_IN:
+    from: [ActionItem, ChangeRequest]
+    to: Meeting
+    properties:
+      decision: { type: string }
+    temporal: false
+
+  RAISED_IN:
+    from: [Risk, ChangeRequest, ActionItem]
+    to: Meeting
+    temporal: false
+
+  # ---------------------------------------------------------------------------
+  # Temporal Relationships
+  # ---------------------------------------------------------------------------
+
+  PRECEDES:
+    from: [Event, Meeting, Sprint]
+    to: [Event, Meeting, Sprint]
+    temporal: false
+
+  FOLLOWS:
+    from: [Event, Meeting, Sprint]
+    to: [Event, Meeting, Sprint]
+    temporal: false
+
+  CORRELATES_WITH:
+    from: MetricSnapshot
+    to: Event
+    properties:
+      correlation_strength: { type: decimal }
+    temporal: false
+
+  # ---------------------------------------------------------------------------
+  # Metric Relationships
+  # ---------------------------------------------------------------------------
+
+  HAS_METRIC:
+    from: [Person, Stream, Sprint, Project]
+    to: MetricSnapshot
+    temporal: false
+
+# =============================================================================
+# METRIC DEFINITIONS
+# =============================================================================
+metrics:
+
+  # Team Metrics
+  team_velocity:
+    description: "Story points completed per sprint"
+    unit: "story_points"
+    aggregation: sum
+    entity_types: [Sprint, Stream]
+
+  engagement_score:
+    description: "Team member engagement score"
+    unit: "score_0_100"
+    aggregation: avg
+    entity_types: [Person]
+
+  # Quality Metrics
+  quality_score:
+    description: "Composite quality score"
+    unit: "score_0_100"
+    aggregation: avg
+    entity_types: [Stream, Person]
+
+  test_coverage:
+    description: "Code test coverage percentage"
+    unit: "percentage"
+    aggregation: avg
+    entity_types: [Stream]
+
+  defect_density:
+    description: "Defects per 1000 lines of code"
+    unit: "defects_per_kloc"
+    aggregation: avg
+    entity_types: [Stream]
+
+  # Financial Metrics
+  budget_variance:
+    description: "Budget variance percentage"
+    unit: "percentage"
+    aggregation: sum
+    entity_types: [Project, Sprint]
+
+  cpi:
+    description: "Cost Performance Index"
+    unit: "ratio"
+    aggregation: avg
+    entity_types: [Project]
+
+  # Productivity Metrics
+  commit_count:
+    description: "Number of commits"
+    unit: "count"
+    aggregation: sum
+    entity_types: [Person, Sprint]
+
+  loc_added:
+    description: "Lines of code added"
+    unit: "lines"
+    aggregation: sum
+    entity_types: [Person, Sprint]

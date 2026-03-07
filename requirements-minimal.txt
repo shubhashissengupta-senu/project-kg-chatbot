@@ -1,0 +1,23 @@
+# Core Dependencies
+networkx>=3.2
+pandas>=2.1
+numpy>=1.26
+pydantic>=2.5
+
+# Time Series
+scipy>=1.12
+
+# API Framework
+fastapi>=0.109
+uvicorn>=0.27
+python-multipart>=0.0.9
+
+# Visualization
+plotly>=5.18
+
+# Utilities
+python-dateutil>=2.8
+pyyaml>=6.0
+python-dotenv>=1.0
+rich>=13.7
+jinja2>=3.1

@@ -1,0 +1,44 @@
+# Core Dependencies
+networkx>=3.2
+pandas>=2.1
+numpy>=1.26
+pydantic>=2.5
+
+# Graph Database (optional - can use networkx in-memory)
+neo4j>=5.15
+
+# Vector Store & Embeddings
+chromadb>=0.4.22
+sentence-transformers>=2.2
+
+# LLM Integration
+anthropic>=0.18.0
+openai>=1.12
+
+# Time Series
+scipy>=1.12
+
+# API Framework
+fastapi>=0.109
+uvicorn>=0.27
+python-multipart>=0.0.9
+
+# UI
+streamlit>=1.31
+plotly>=5.18
+
+# Utilities
+python-dateutil>=2.8
+pyyaml>=6.0
+python-dotenv>=1.0
+rich>=13.7
+typer>=0.9
+
+# Testing
+pytest>=8.0
+pytest-asyncio>=0.23
+
+# Development
+black>=24.1
+isort>=5.13
+mypy>=1.8

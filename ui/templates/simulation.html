@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simulation - Project KG</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0f0f1a;
+            color: #fff;
+            min-height: 100vh;
+            display: flex;
+        }
+        .sidebar {
+            width: 250px;
+            background: #1a1a2e;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            position: fixed;
+            height: 100vh;
+        }
+        .logo { font-size: 24px; font-weight: bold; margin-bottom: 30px; }
+        .nav-item {
+            padding: 12px 16px;
+            margin-bottom: 8px;
+            border-radius: 8px;
+            cursor: pointer;
+            text-decoration: none;
+            color: #aaa;
+            display: block;
+        }
+        .nav-item:hover, .nav-item.active { background: rgba(102,126,234,0.2); color: #fff; }
+        .user-info {
+            margin-top: auto;
+            padding: 16px;
+            background: rgba(255,255,255,0.05);
+            border-radius: 8px;
+        }
+        .main {
+            flex: 1;
+            margin-left: 250px;
+            padding: 30px;
+        }
+        .header { margin-bottom: 30px; }
+        .header h2 { margin-bottom: 8px; }
+        .header p { color: #888; }
+        .scenarios {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        .scenario-card {
+            background: rgba(255,255,255,0.05);
+            border-radius: 12px;
+            padding: 24px;
+            cursor: pointer;
+            transition: all 0.3s;
+            border: 2px solid transparent;
+        }
+        .scenario-card:hover { background: rgba(255,255,255,0.1); }
+        .scenario-card.selected { border-color: #667eea; background: rgba(102,126,234,0.1); }
+        .scenario-card h3 { margin-bottom: 8px; }
+        .scenario-card p { font-size: 14px; color: #888; }
+        .config-panel {
+            background: rgba(255,255,255,0.05);
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 30px;
+            display: none;
+        }
+        .config-panel.active { display: block; }
+        .config-panel h3 { margin-bottom: 20px; }
+        .param-group {
+            margin-bottom: 20px;
+        }
+        .param-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-size: 14px;
+            color: #aaa;
+        }
+        .param-group select, .param-group input {
+            width: 100%;
+            padding: 12px 16px;
+            background: rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 8px;
+            color: #fff;
+            font-size: 14px;
+        }
+        .run-btn {
+            padding: 14px 32px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            border-radius: 8px;
+            color: #fff;
+            font-weight: 600;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        .run-btn:hover { transform: translateY(-2px); }
+        .results {
+            background: rgba(255,255,255,0.05);
+            border-radius: 12px;
+            padding: 24px;
+            display: none;
+        }
+        .results.active { display: block; }
+        .results h3 { margin-bottom: 20px; }
+        .result-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        .result-item {
+            background: rgba(255,255,255,0.05);
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        .result-item .value { font-size: 28px; font-weight: bold; margin-bottom: 4px; }
+        .result-item .label { font-size: 13px; color: #888; }
+        .result-item.negative .value { color: #ff6b6b; }
+        .result-item.positive .value { color: #4ecdc4; }
+        .impact-assessment {
+            background: rgba(255,200,100,0.1);
+            border-left: 4px solid #feca57;
+            padding: 16px 20px;
+            margin-bottom: 20px;
+            border-radius: 0 8px 8px 0;
+        }
+        .recommendations {
+            margin-top: 20px;
+        }
+        .recommendations h4 { margin-bottom: 12px; }
+        .recommendations ul { margin-left: 20px; }
+        .recommendations li { margin-bottom: 8px; color: #aaa; }
+    </style>
+</head>
+<body>
+    <div class="sidebar">
+        <div class="logo">Project KG</div>
+        <a href="/chat" class="nav-item">Chat</a>
+        <a href="/graph" class="nav-item">Knowledge Graph</a>
+        <a href="/dashboard" class="nav-item">Dashboard</a>
+        <a href="/simulation" class="nav-item active">Simulation</a>
+        <div class="user-info">
+            <div id="userName">User</div>
+            <div style="font-size:12px;color:#888" id="userRole">Role</div>
+            <a href="/login" style="color:#667eea;font-size:12px;margin-top:8px;display:block;">Logout</a>
+        </div>
+    </div>
+    <div class="main">
+        <div class="header">
+            <h2>What-If Simulation</h2>
+            <p>Explore different scenarios and their potential impact on the project</p>
+        </div>
+
+        <h3 style="margin-bottom:16px;">Select a Scenario</h3>
+        <div class="scenarios">
+            <div class="scenario-card" data-scenario="resource_departure" onclick="selectScenario(this)">
+                <h3>Team Member Departure</h3>
+                <p>Simulate the impact of a team member leaving the project</p>
+            </div>
+            <div class="scenario-card" data-scenario="scope_addition" onclick="selectScenario(this)">
+                <h3>Scope Addition</h3>
+                <p>What happens if new requirements are added to the project?</p>
+            </div>
+            <div class="scenario-card" data-scenario="quality_issue" onclick="selectScenario(this)">
+                <h3>Quality Issue Discovery</h3>
+                <p>Impact of discovering significant quality issues</p>
+            </div>
+            <div class="scenario-card" data-scenario="timeline_change" onclick="selectScenario(this)">
+                <h3>Timeline Change</h3>
+                <p>Effects of extending or compressing the timeline</p>
+            </div>
+            <div class="scenario-card" data-scenario="budget_pressure" onclick="selectScenario(this)">
+                <h3>Budget Pressure</h3>
+                <p>How to respond to budget constraints</p>
+            </div>
+        </div>
+
+        <div class="config-panel" id="configPanel">
+            <h3>Configure Parameters</h3>
+            <div id="paramContainer"></div>
+            <button class="run-btn" onclick="runSimulation()">Run Simulation</button>
+        </div>
+
+        <div class="results" id="resultsPanel">
+            <h3>Simulation Results</h3>
+            <div class="result-grid" id="resultGrid"></div>
+            <div class="impact-assessment" id="impactAssessment"></div>
+            <div class="recommendations">
+                <h4>Recommendations</h4>
+                <ul id="recommendationsList"></ul>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const sessionId = localStorage.getItem('session_id');
+        const user = JSON.parse(localStorage.getItem('user') || '{}');
+        if (!sessionId) window.location.href = '/login';
+
+        document.getElementById('userName').textContent = user.username || 'User';
+        document.getElementById('userRole').textContent = user.role?.name || 'Unknown';
+
+        let selectedScenario = null;
+
+        const scenarioParams = {
+            resource_departure: [
+                {name: 'departing_member', label: 'Team Member', type: 'select', options: ['Ryan', 'Dhyanesh', 'Riaz', 'Nayan', 'Jhanvi']},
+                {name: 'notice_period_days', label: 'Notice Period (days)', type: 'number', min: 0, max: 30, default: 14},
+                {name: 'replacement_time_days', label: 'Replacement Time (days)', type: 'number', min: 7, max: 45, default: 21}
+            ],
+            scope_addition: [
+                {name: 'story_points', label: 'Additional Story Points', type: 'number', min: 10, max: 100, default: 30},
+                {name: 'stream', label: 'Affected Stream', type: 'select', options: ['SD', 'EWM', 'Both']},
+                {name: 'cr_approved', label: 'CR Approved?', type: 'select', options: ['Yes', 'No']}
+            ],
+            quality_issue: [
+                {name: 'severity', label: 'Issue Severity', type: 'select', options: ['Low', 'Medium', 'High', 'Critical']},
+                {name: 'affected_module', label: 'Affected Module', type: 'select', options: ['SD Core', 'SD Pricing', 'EWM Core', 'EWM Voice', 'Integration']},
+                {name: 'discovery_timing', label: 'Discovery Timing', type: 'select', options: ['Now', 'During UAT', 'Post Go-Live']}
+            ],
+            timeline_change: [
+                {name: 'days_change', label: 'Days Added (+) or Removed (-)', type: 'number', min: -14, max: 30, default: 0},
+                {name: 'affected_milestone', label: 'Affected Milestone', type: 'select', options: ['Stream 1 UAT', 'Stream 1 Go-Live', 'Stream 2 UAT', 'Stream 2 Go-Live']}
+            ],
+            budget_pressure: [
+                {name: 'budget_reduction_pct', label: 'Budget Reduction %', type: 'number', min: 5, max: 25, default: 10},
+                {name: 'response_strategy', label: 'Response Strategy', type: 'select', options: ['Reduce scope', 'Reduce quality', 'Overtime', 'Delay timeline']}
+            ]
+        };
+
+        function selectScenario(card) {
+            document.querySelectorAll('.scenario-card').forEach(c => c.classList.remove('selected'));
+            card.classList.add('selected');
+            selectedScenario = card.dataset.scenario;
+
+            const params = scenarioParams[selectedScenario] || [];
+            const container = document.getElementById('paramContainer');
+            container.innerHTML = params.map(p => {
+                if (p.type === 'select') {
+                    return `<div class="param-group">
+                        <label>${p.label}</label>
+                        <select name="${p.name}">${p.options.map(o => `<option value="${o}">${o}</option>`).join('')}</select>
+                    </div>`;
+                } else {
+                    return `<div class="param-group">
+                        <label>${p.label}</label>
+                        <input type="number" name="${p.name}" min="${p.min}" max="${p.max}" value="${p.default || p.min}">
+                    </div>`;
+                }
+            }).join('');
+
+            document.getElementById('configPanel').classList.add('active');
+            document.getElementById('resultsPanel').classList.remove('active');
+        }
+
+        async function runSimulation() {
+            if (!selectedScenario) return;
+
+            const params = {};
+            document.querySelectorAll('#paramContainer input, #paramContainer select').forEach(el => {
+                let value = el.value;
+                if (el.type === 'number') value = parseInt(value);
+                if (value === 'Yes') value = true;
+                if (value === 'No') value = false;
+                params[el.name] = value;
+            });
+
+            try {
+                const response = await fetch(`/api/simulation/run?session_id=${sessionId}`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({scenario_id: selectedScenario, parameters: params})
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    displayResults(data);
+                } else {
+                    // Show sample results for demo
+                    displayResults({
+                        outcomes: {
+                            timeline_impact_days: 14,
+                            cost_impact_usd: 35000,
+                            probability: 0.65
+                        },
+                        impact_assessment: 'Significant impact - needs mitigation plan',
+                        recommendations: [
+                            'Document critical knowledge immediately',
+                            'Identify backup resources',
+                            'Consider retention incentives for key personnel'
+                        ]
+                    });
+                }
+            } catch (err) {
+                // Show sample results for demo
+                displayResults({
+                    outcomes: {
+                        timeline_impact_days: 14,
+                        cost_impact_usd: 35000,
+                        probability: 0.65
+                    },
+                    impact_assessment: 'Significant impact - needs mitigation plan',
+                    recommendations: [
+                        'Document critical knowledge immediately',
+                        'Identify backup resources',
+                        'Consider retention incentives for key personnel'
+                    ]
+                });
+            }
+        }
+
+        function displayResults(data) {
+            const outcomes = data.outcomes || {};
+            const grid = document.getElementById('resultGrid');
+
+            grid.innerHTML = `
+                <div class="result-item negative">
+                    <div class="value">${outcomes.timeline_impact_days || 0} days</div>
+                    <div class="label">Timeline Impact</div>
+                </div>
+                <div class="result-item negative">
+                    <div class="value">$${(outcomes.cost_impact_usd || 0).toLocaleString()}</div>
+                    <div class="label">Cost Impact</div>
+                </div>
+                <div class="result-item">
+                    <div class="value">${Math.round((outcomes.probability || 0) * 100)}%</div>
+                    <div class="label">Probability</div>
+                </div>
+            `;
+
+            document.getElementById('impactAssessment').innerHTML = `<strong>Assessment:</strong> ${data.impact_assessment || 'Analysis complete'}`;
+
+            const recList = document.getElementById('recommendationsList');
+            recList.innerHTML = (data.recommendations || []).map(r => `<li>${r}</li>`).join('');
+
+            document.getElementById('resultsPanel').classList.add('active');
+        }
+    </script>
+</body>
+</html>
