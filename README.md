@@ -1,6 +1,6 @@
-# Project KG Chatbot
+# Delivery Brain
 
-A Knowledge Graph-based Project Intelligence Chatbot with Role-Based Access Control for the ABC Inc. SAP S/4HANA Migration project.
+A Knowledge Graph-based Project Intelligence System with Role-Based Access Control for the ABC Inc. SAP S/4HANA Migration project.
 
 ## Features
 
@@ -51,30 +51,50 @@ pip install -r requirements-minimal.txt
 
 ## Running the Application
 
-### Using Scripts (Recommended)
+### Quick Start
 
-**Windows (Command Prompt):**
+| Platform | Start | Stop | Status |
+|----------|-------|------|--------|
+| Windows | `scripts\start_server.bat` | `scripts\stop_server.bat` | `scripts\status.bat` |
+| Unix/Mac | `./scripts/start_server.sh` | `./scripts/stop_server.sh` | `./scripts/status.sh` |
+
+### Server Details
+
+- **Default Port:** 8888
+- **Host:** 127.0.0.1 (localhost only)
+- **Startup Time:** ~30 seconds (initializes knowledge graph and RAG engine)
+
+### Windows (Command Prompt)
+
 ```batch
-# Start server (default port 8888)
+cd project-kg-chatbot
+
+REM Start server (default port 8888)
 scripts\start_server.bat
 
-# Start on custom port
+REM Start on custom port
 scripts\start_server.bat 9000
 
-# Check server status
+REM Check server status
 scripts\status.bat
 
-# Stop server
+REM Stop server
 scripts\stop_server.bat
 ```
 
-**Unix/Mac (Terminal):**
+### Unix/Mac (Terminal)
+
 ```bash
+cd project-kg-chatbot
+
 # Make executable (one time)
 chmod +x scripts/*.sh
 
 # Start server
 ./scripts/start_server.sh
+
+# Start on custom port
+./scripts/start_server.sh 9000
 
 # Check server status
 ./scripts/status.sh
@@ -83,24 +103,41 @@ chmod +x scripts/*.sh
 ./scripts/stop_server.sh
 ```
 
-### Manual Start
+### Manual Start (Any Platform)
 
 ```bash
+cd project-kg-chatbot
+
 # Start the FastAPI server
 python -m uvicorn app:app --host 127.0.0.1 --port 8888
 
-# Open in browser
-# http://127.0.0.1:8888/login
+# Server will display:
+# INFO:     Uvicorn running on http://127.0.0.1:8888
+
+# Stop: Press Ctrl+C in the terminal
+```
+
+### Verify Server is Running
+
+```bash
+# Check if port 8888 is listening
+# Windows:
+netstat -ano | findstr :8888
+
+# Unix/Mac:
+lsof -i :8888
 ```
 
 ## Demo Accounts
 
 | Role | Username | Password | Access Level |
 |------|----------|----------|--------------|
-| QA Director | roshan | demo123 | Full access to all data |
-| Delivery Lead | krutika | demo123 | Full access to all data |
-| Onsite Lead | tara | demo123 | Scrum, quality, productivity, CRs |
-| Auditor | rick | demo123 | Financial data only |
+| QA Director | roshan | Acc1234$$ | Full access to all data |
+| Delivery Lead | krutika | Acc1234$$ | Full access to all data |
+| Onsite Coordinator | tara | Acc1234$$ | Scrum, quality, productivity, CRs |
+| Financial Auditor | rick | Acc1234$$ | Financial data only |
+
+**Note:** On the login page, select a role from the dropdown and enter the password above.
 
 ## Pages
 
@@ -163,6 +200,37 @@ The system ingests project data from markdown files including:
 - QA review meetings (3 files)
 - Finance reviews (3 files)
 - Developer metrics (5 files)
+
+## Troubleshooting
+
+### Port Already in Use
+
+```bash
+# Windows - Find and kill process on port 8888
+netstat -ano | findstr :8888
+taskkill /F /PID <PID_NUMBER>
+
+# Unix/Mac
+lsof -i :8888
+kill -9 <PID_NUMBER>
+
+# Or use a different port
+scripts\start_server.bat 9000
+```
+
+### Server Won't Start
+
+1. Ensure Python 3.10+ is installed: `python --version`
+2. Ensure dependencies are installed: `pip install -r requirements-minimal.txt`
+3. Ensure you're in the project directory: `cd project-kg-chatbot`
+4. Check for error messages in the terminal output
+
+### Cannot Access Pages
+
+1. Wait for server initialization (~30 seconds)
+2. Look for "Application startup complete" in terminal
+3. Ensure you're using `http://` not `https://`
+4. Try `http://127.0.0.1:8888` instead of `localhost:8888`
 
 ## License
 

@@ -1,6 +1,7 @@
 @echo off
-REM Start Project KG Chatbot Server
+REM Delivery Brain - Start Server Script (Windows)
 REM Usage: start_server.bat [port]
+REM Default port: 8888
 
 setlocal
 
@@ -8,34 +9,25 @@ set PORT=%1
 if "%PORT%"=="" set PORT=8888
 
 echo ========================================
-echo   Project KG Chatbot - Starting Server
+echo   Delivery Brain Server
 echo ========================================
+echo.
+echo Starting server on port %PORT%...
 echo.
 
 cd /d "%~dp0.."
 
-REM Check if port is already in use
-netstat -ano | findstr ":%PORT%" | findstr "LISTENING" >nul
-if %errorlevel%==0 (
-    echo ERROR: Port %PORT% is already in use.
+REM Check if port is in use
+netstat -ano | findstr ":%PORT% " | findstr "LISTENING" >/dev/null 2>&1
+if %ERRORLEVEL%==0 (
+    echo ERROR: Port %PORT% is already in use!
     echo Run stop_server.bat first or use a different port.
-    echo.
-    pause
     exit /b 1
 )
 
-echo Starting server on http://127.0.0.1:%PORT%
+REM Start the server
+echo Server starting... (this takes ~30 seconds for initialization)
 echo.
-echo Demo Accounts:
-echo   roshan / demo123   (QA Director)
-echo   krutika / demo123  (Delivery Lead)
-echo   tara / demo123     (Onsite Lead)
-echo   rick / demo123     (Auditor)
-echo.
-echo Press Ctrl+C to stop the server
-echo ========================================
-echo.
-
 python -m uvicorn app:app --host 127.0.0.1 --port %PORT%
 
 endlocal

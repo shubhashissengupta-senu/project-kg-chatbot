@@ -1,6 +1,7 @@
 @echo off
-REM Check Project KG Chatbot Server Status
+REM Delivery Brain - Server Status Script (Windows)
 REM Usage: status.bat [port]
+REM Default port: 8888
 
 setlocal
 
@@ -8,26 +9,24 @@ set PORT=%1
 if "%PORT%"=="" set PORT=8888
 
 echo ========================================
-echo   Project KG Chatbot - Server Status
+echo   Delivery Brain - Server Status
 echo ========================================
 echo.
 
-REM Check if port is listening
-netstat -ano | findstr ":%PORT%" | findstr "LISTENING" >nul
-if %errorlevel%==0 (
+REM Check if server is running
+netstat -ano | findstr ":%PORT% " | findstr "LISTENING" >/dev/null 2>&1
+if %ERRORLEVEL%==0 (
     echo Status: RUNNING
     echo.
     echo Server Details:
-    for /f "tokens=2,5" %%a in ('netstat -ano ^| findstr ":%PORT%" ^| findstr "LISTENING"') do (
-        echo   Address: %%a
-        echo   PID: %%b
-    )
+    netstat -ano | findstr ":%PORT% " | findstr "LISTENING"
     echo.
-    echo Testing endpoint...
-    curl -s -o nul -w "  HTTP Response: %%{http_code}" http://127.0.0.1:%PORT%/login
-    echo.
-    echo.
-    echo Open in browser: http://127.0.0.1:%PORT%/login
+    echo Access URLs:
+    echo   Login:      http://127.0.0.1:%PORT%/login
+    echo   Dashboard:  http://127.0.0.1:%PORT%/dashboard
+    echo   Chat:       http://127.0.0.1:%PORT%/chat
+    echo   Graph:      http://127.0.0.1:%PORT%/graph
+    echo   Simulation: http://127.0.0.1:%PORT%/simulation
 ) else (
     echo Status: STOPPED
     echo.
@@ -35,5 +34,4 @@ if %errorlevel%==0 (
 )
 
 echo.
-echo ========================================
 endlocal
