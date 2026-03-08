@@ -227,7 +227,7 @@
             <p>ABC Inc. SAP S/4HANA Migration - As of March 7, 2026</p>
         </div>
 
-        <div class="grid">
+        <div class="grid" id="metricsGrid">
             <div class="card">
                 <h3>Overall Status</h3>
                 <div class="value"><span class="status-badge status-amber">AMBER</span></div>
@@ -238,12 +238,12 @@
                 <div class="value">30</div>
                 <div class="change">Stream 1: Apr 6 | Stream 2: Apr 22</div>
             </div>
-            <div class="card">
+            <div class="card" data-permission="view_productivity_metrics">
                 <h3>Team Velocity</h3>
                 <div class="value">210</div>
                 <div class="change positive">+12% from last sprint</div>
             </div>
-            <div class="card">
+            <div class="card" data-permission="view_financial_metrics">
                 <h3>Budget Utilization</h3>
                 <div class="value">78%</div>
                 <div class="change">$1.44M of $1.85M</div>
@@ -459,8 +459,44 @@
         const user = JSON.parse(localStorage.getItem('user') || '{}');
         if (!sessionId) window.location.href = '/login';
 
-        document.getElementById('userName').textContent = user.username || 'User';
-        document.getElementById('userRole').textContent = user.role?.name || 'Unknown';
+        document.getElementById('userName').textContent = user.display_name || user.username || 'User';
+        document.getElementById('userRole').textContent = user.role_display || user.role || 'Unknown';
+
+        // Apply role-based filtering
+        const permissions = user.permissions || [];
+        const hasPermission = (perm) => permissions.includes(perm) || permissions.includes('view_all');
+
+        // Hide cards based on permissions
+        document.querySelectorAll('[data-permission]').forEach(el => {
+            const requiredPerm = el.dataset.permission;
+            if (!hasPermission(requiredPerm)) {
+                el.style.display = 'none';
+            }
+        });
+
+        // Hide velocity chart for auditors (no productivity access)
+        if (!hasPermission('view_productivity_metrics')) {
+            document.getElementById('velocityChart').parentElement.style.display = 'none';
+        }
+
+        // Hide quality chart for auditors (no quality access)
+        if (!hasPermission('view_quality_metrics')) {
+            document.getElementById('qualityChart').parentElement.style.display = 'none';
+        }
+
+        // Show role-specific message
+        const roleMessages = {
+            'auditor': 'Financial view - Showing budget and cost metrics only',
+            'onsite_lead': 'Operational view - Showing delivery and quality metrics',
+            'delivery_lead': 'Full access - All project metrics visible',
+            'qa_director': 'Full access - All project metrics visible'
+        };
+
+        const roleName = user.role || '';
+        if (roleMessages[roleName] && roleName !== 'delivery_lead' && roleName !== 'qa_director') {
+            const header = document.querySelector('.header p');
+            header.innerHTML += `<br><span style="color:#667eea;font-size:12px;">${roleMessages[roleName]}</span>`;
+        }
 
         // Velocity Chart
         Plotly.newPlot('velocityChart', [{

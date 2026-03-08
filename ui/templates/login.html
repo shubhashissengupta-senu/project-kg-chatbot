@@ -227,6 +227,10 @@
                 </select>
             </div>
             <div class="role-description" id="roleDescription"></div>
+            <div class="form-group">
+                <label>Password</label>
+                <input type="password" id="password" placeholder="Enter password" required>
+            </div>
             <button type="submit">Sign In</button>
         </form>
 
@@ -288,6 +292,7 @@
         document.getElementById('loginForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             const role = document.getElementById('roleSelect').value;
+            const password = document.getElementById('password').value;
             const errorDiv = document.getElementById('error');
 
             if (!role) {
@@ -296,8 +301,13 @@
                 return;
             }
 
+            if (!password) {
+                errorDiv.textContent = 'Please enter the password.';
+                errorDiv.style.display = 'block';
+                return;
+            }
+
             const username = roleUsers[role];
-            const password = 'Acc1234$$';
 
             try {
                 const response = await fetch('/api/auth/login', {

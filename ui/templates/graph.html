@@ -218,12 +218,12 @@
             box-shadow: 0 0 15px rgba(102,126,234,0.5);
         }
         .milestone-markers {
-            display: flex;
-            justify-content: space-between;
-            margin-top: 10px;
-            padding: 0 5px;
+            position: relative;
+            height: 40px;
+            margin-top: 5px;
         }
         .milestone-marker {
+            position: absolute;
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -232,6 +232,7 @@
             border-radius: 6px;
             transition: all 0.2s;
             opacity: 0.7;
+            transform: translateX(-50%);
         }
         .milestone-marker:hover {
             opacity: 1;
@@ -753,6 +754,9 @@
 
         function renderMilestoneMarkers() {
             const container = document.getElementById('milestoneMarkers');
+            const slider = document.getElementById('timeSlider');
+            const maxIndex = parseInt(slider.max) || 1;
+
             if (!allSnapshots.length) {
                 container.innerHTML = '';
                 return;
@@ -774,7 +778,9 @@
                 });
 
                 if (closestIndex >= 0 && closestDiff <= 3 * 24 * 60 * 60 * 1000) {
-                    return `<div class="milestone-marker" data-index="${closestIndex}" title="${m.label} (${m.date})">
+                    // Calculate position as percentage of slider track
+                    const leftPercent = (closestIndex / maxIndex) * 100;
+                    return `<div class="milestone-marker" data-index="${closestIndex}" title="${m.label} (${m.date})" style="left: ${leftPercent}%;">
                         <div class="milestone-dot ${m.type}"></div>
                         <span class="milestone-label">${m.label}</span>
                     </div>`;
