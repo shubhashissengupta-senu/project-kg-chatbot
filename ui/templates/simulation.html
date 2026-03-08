@@ -1093,7 +1093,13 @@
             renderRiskChart(outcomes);
 
             document.getElementById('resultsPanel').classList.add('active');
-            document.getElementById('resultsPanel').scrollIntoView({behavior: 'smooth'});
+            // Only scroll if results panel is not already visible
+            const resultsPanel = document.getElementById('resultsPanel');
+            const rect = resultsPanel.getBoundingClientRect();
+            const isVisible = rect.top >= 0 && rect.top < window.innerHeight;
+            if (!isVisible) {
+                resultsPanel.scrollIntoView({behavior: 'smooth', block: 'start'});
+            }
         }
 
         function renderImpactChart(outcomes) {
