@@ -1,14 +1,20 @@
 """
 RAG Engine
-Combines retrieval with response generation.
+Combines retrieval with LLM-powered response generation.
 """
 
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, TYPE_CHECKING
 from dataclasses import dataclass
 from pathlib import Path
+import logging
 
 from .document_store import DocumentStore
 from .retriever import DocumentRetriever, RetrievalResult
+
+if TYPE_CHECKING:
+    from ..llm.llm_service import LLMService
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -22,13 +28,15 @@ class RAGResponse:
 
 class RAGEngine:
     """
-    Lite RAG Engine for answering ad-hoc questions.
-    Uses TF-IDF retrieval and template-based response generation.
+    RAG Engine for answering ad-hoc questions.
+    Uses TF-IDF retrieval with LLM-powered response generation.
+    Falls back to template-based responses when LLM is unavailable.
     """
 
-    def __init__(self, data_directory: Optional[Path] = None):
+    def __init__(self, data_directory: Optional[Path] = None, llm_service: "LLMService" = None):
         self.store = DocumentStore(chunk_size=600, chunk_overlap=100)
         self.retriever: Optional[DocumentRetriever] = None
+        self.llm = llm_service
         self.is_initialized = False
 
         if data_directory:
@@ -41,6 +49,11 @@ class RAGEngine:
         self.retriever = DocumentRetriever(self.store)
         self.is_initialized = True
         return count
+
+    def set_llm_service(self, llm_service: "LLMService"):
+        """Set or update the LLM service"""
+        self.llm = llm_service
+        logger.info(f"LLM service configured: {llm_service.is_available()}")
 
     def query(self, question: str, top_k: int = 5, allowed_doc_types: List[str] = None) -> RAGResponse:
         """
@@ -96,11 +109,47 @@ class RAGEngine:
         )
 
     def _generate_response(self, question: str, results: List[RetrievalResult]) -> str:
-        """Generate a response from retrieved chunks"""
-        # Extract key information
-        question_lower = question.lower()
+        """Generate a response from retrieved chunks using LLM or fallback to templates"""
 
-        # Build response parts
+        # Build context from retrieved chunks
+        context_parts = []
+        seen_content = set()
+
+        for result in results[:5]:
+            content = result.chunk.content.strip()
+            content_key = content[:100]
+            if content_key in seen_content:
+                continue
+            seen_content.add(content_key)
+
+            source = result.chunk.source_title
+            date_str = result.chunk.metadata.get('date_str', '')
+            section = result.chunk.metadata.get('section', '')
+
+            source_info = f"Source: {source}"
+            if date_str:
+                source_info += f" ({date_str})"
+            if section:
+                source_info += f" - {section}"
+
+            context_parts.append(f"[{source_info}]\n{content}\n")
+
+        context = "\n---\n".join(context_parts)
+
+        # Try LLM-based generation first
+        if self.llm and self.llm.is_available():
+            logger.debug("Using LLM for response generation")
+            try:
+                return self.llm.generate_response(question, context)
+            except Exception as e:
+                logger.warning(f"LLM generation failed, falling back to template: {e}")
+
+        # Fallback to template-based response
+        return self._template_response(question, results)
+
+    def _template_response(self, question: str, results: List[RetrievalResult]) -> str:
+        """Generate a template-based response (fallback when LLM unavailable)"""
+        question_lower = question.lower()
         parts = []
 
         # Add introduction based on question type
@@ -121,25 +170,18 @@ class RAGEngine:
         seen_content = set()
         for i, result in enumerate(results[:3], 1):
             content = result.chunk.content.strip()
-
-            # Avoid duplicate content
             content_key = content[:100]
             if content_key in seen_content:
                 continue
             seen_content.add(content_key)
 
-            # Clean and format content
             content = self._clean_content(content)
-
-            # Truncate if too long
             if len(content) > 500:
                 content = content[:500] + "..."
 
             source = result.chunk.source_title
             date_str = result.chunk.metadata.get('date_str', '')
             section = result.chunk.metadata.get('section', '')
-
-            # Format source reference
             source_ref = f"*{source}*"
             if date_str:
                 source_ref += f" ({date_str})"
@@ -149,7 +191,6 @@ class RAGEngine:
             parts.append(f"**{i}. From {source_ref}:**")
             parts.append(f"{content}\n")
 
-        # Add summary of match quality
         if results:
             avg_score = sum(r.score for r in results[:3]) / min(3, len(results))
             if avg_score > 0.1:

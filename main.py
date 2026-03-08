@@ -32,8 +32,24 @@ def setup_system(data_directory: str = None):
     from src.inference.query_engine import TemporalQueryEngine
     from src.inference.risk_predictor import RiskPredictor
     from src.chatbot.chat_engine import ChatEngine
+    from src.llm.llm_service import LLMService, LLMConfig
+    from src.rag.rag_engine import RAGEngine
 
     logger.info("Initializing Project KG Chatbot System...")
+
+    # Initialize LLM service
+    logger.info("Initializing LLM service...")
+    llm_config = LLMConfig(
+        provider="anthropic",
+        model="claude-sonnet-4-20250514",
+        max_tokens=2048,
+        temperature=0.3
+    )
+    llm_service = LLMService(llm_config)
+    if llm_service.is_available():
+        logger.info("LLM service initialized successfully")
+    else:
+        logger.warning("LLM service not available - using template-based responses")
 
     # Step 1: Create ingestion pipeline
     logger.info("Creating ingestion pipeline...")
@@ -87,12 +103,21 @@ def setup_system(data_directory: str = None):
     logger.info("Creating risk predictor...")
     risk_predictor = RiskPredictor(query_engine, metrics_store)
 
-    # Step 7: Create chat engine
+    # Step 7: Create RAG engine with LLM support
+    logger.info("Creating RAG engine...")
+    rag_engine = None
+    if data_directory:
+        rag_engine = RAGEngine(data_directory=Path(data_directory), llm_service=llm_service)
+        logger.info(f"RAG engine initialized with {rag_engine.get_stats().get('total_chunks', 0)} chunks")
+
+    # Step 8: Create chat engine with LLM support
     logger.info("Creating chat engine...")
     chat_engine = ChatEngine(
         query_engine,
         risk_predictor,
-        metrics_store
+        metrics_store,
+        rag_engine=rag_engine,
+        llm_client=llm_service
     )
 
     logger.info("System initialization complete!")

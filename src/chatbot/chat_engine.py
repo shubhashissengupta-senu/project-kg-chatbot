@@ -5,7 +5,7 @@ Main conversational interface for project queries.
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, TYPE_CHECKING
 import logging
 
 from .query_planner import QueryPlanner, QueryPlan, QueryType
@@ -14,6 +14,7 @@ from ..inference.risk_predictor import RiskPredictor
 from ..time_series.metrics_store import TimeSeriesMetricsStore
 from ..time_series.trend_analyzer import TrendAnalyzer
 from ..rag.rag_engine import RAGEngine
+from ..llm.llm_service import LLMService
 
 logger = logging.getLogger(__name__)
 
@@ -100,16 +101,22 @@ class ChatEngine:
                  risk_predictor: RiskPredictor,
                  metrics_store: TimeSeriesMetricsStore,
                  rag_engine: RAGEngine = None,
-                 llm_client: Any = None):
+                 llm_client: LLMService = None):
         self.query_engine = query_engine
         self.risk_predictor = risk_predictor
         self.metrics = metrics_store
         self.trend_analyzer = TrendAnalyzer(metrics_store)
         self.rag_engine = rag_engine
-        self.llm = llm_client
+        self.llm: LLMService = llm_client
 
         self.query_planner = QueryPlanner()
         self.context = ConversationContext()
+
+        # Log LLM availability
+        if self.llm and self.llm.is_available():
+            logger.info("ChatEngine initialized with LLM support")
+        else:
+            logger.info("ChatEngine initialized without LLM (using templates)")
 
     def chat(self, user_message: str, allowed_doc_types: List[str] = None) -> ChatResponse:
         """
@@ -321,19 +328,29 @@ class ChatEngine:
                            query: str,
                            plan: QueryPlan,
                            results: Dict) -> ChatResponse:
-        """Generate natural language response"""
+        """Generate natural language response, using LLM when available"""
 
-        # Build response based on query type
-        answer = self._build_answer(plan, results)
+        # Try LLM-based response generation first
+        if self.llm and self.llm.is_available():
+            try:
+                answer = self._generate_llm_response(query, plan, results)
+                confidence = self._calculate_confidence(results)
+                # Boost confidence when using LLM
+                confidence = min(0.95, confidence + 0.2)
+            except Exception as e:
+                logger.warning(f"LLM response generation failed: {e}")
+                answer = self._build_answer(plan, results)
+                confidence = self._calculate_confidence(results)
+        else:
+            # Fallback to template-based response
+            answer = self._build_answer(plan, results)
+            confidence = self._calculate_confidence(results)
 
         # Extract sources
         sources = self._extract_sources(results)
 
         # Generate follow-up questions
         follow_ups = self._generate_follow_ups(plan, results)
-
-        # Calculate confidence
-        confidence = self._calculate_confidence(results)
 
         return ChatResponse(
             answer=answer,
@@ -343,6 +360,74 @@ class ChatEngine:
             confidence=confidence,
             query_type=plan.query_type.value
         )
+
+    def _generate_llm_response(self, query: str, plan: QueryPlan, results: Dict) -> str:
+        """Generate response using LLM"""
+        # Format the data as context for the LLM
+        data = results.get("data", {})
+        metrics = results.get("metrics", {})
+
+        context_parts = []
+        context_parts.append(f"Query Type: {plan.query_type.value}")
+
+        if plan.entities:
+            entities_str = ", ".join([f"{e.entity_type}:{e.value}" for e in plan.entities])
+            context_parts.append(f"Entities: {entities_str}")
+
+        if plan.time_constraints:
+            context_parts.append(f"Time Context: {plan.time_constraints}")
+
+        context_parts.append(f"\nData Retrieved:\n{self._format_data_for_llm(data)}")
+
+        if metrics:
+            context_parts.append(f"\nMetrics:\n{self._format_data_for_llm(metrics)}")
+
+        context = "\n".join(context_parts)
+
+        system_prompt = """You are a project assistant for the ABC Inc. SAP S/4HANA Migration Project.
+Answer questions clearly and concisely based on the knowledge graph data provided.
+
+Guidelines:
+- Use the data provided to give accurate answers
+- Format responses with markdown for readability
+- Include specific dates, names, and numbers when available
+- If data is incomplete, acknowledge limitations
+- Be helpful and provide actionable insights when possible"""
+
+        return self.llm.generate_response(query, context, system_prompt)
+
+    def _format_data_for_llm(self, data: Any, indent: int = 0) -> str:
+        """Format data for LLM context"""
+        if data is None:
+            return "No data"
+
+        if isinstance(data, dict):
+            if not data:
+                return "Empty"
+            lines = []
+            for k, v in list(data.items())[:20]:  # Limit items
+                if isinstance(v, (dict, list)) and v:
+                    lines.append(f"{'  ' * indent}{k}:")
+                    lines.append(self._format_data_for_llm(v, indent + 1))
+                else:
+                    lines.append(f"{'  ' * indent}{k}: {v}")
+            return "\n".join(lines)
+        elif isinstance(data, list):
+            if not data:
+                return "Empty list"
+            lines = []
+            for item in data[:15]:  # Limit items
+                formatted = self._format_data_for_llm(item, indent)
+                if '\n' in formatted:
+                    lines.append(f"{'  ' * indent}-")
+                    lines.append(formatted)
+                else:
+                    lines.append(f"{'  ' * indent}- {formatted}")
+            if len(data) > 15:
+                lines.append(f"{'  ' * indent}... and {len(data) - 15} more items")
+            return "\n".join(lines)
+        else:
+            return str(data)
 
     def _build_answer(self, plan: QueryPlan, results: Dict) -> str:
         """Build natural language answer"""
