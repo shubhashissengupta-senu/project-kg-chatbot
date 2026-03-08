@@ -275,29 +275,105 @@ def get_base_html(title: str, content: str) -> str:
             border-radius: 8px;
         }}
         .chat-container {{
-            height: calc(100vh - 200px);
+            height: calc(100vh - 220px);
             overflow-y: auto;
+            padding: 20px;
+            scroll-behavior: smooth;
         }}
         .message {{
-            padding: 12px 16px;
-            border-radius: 12px;
-            margin-bottom: 12px;
-            max-width: 80%;
+            padding: 16px 20px;
+            border-radius: 16px;
+            margin-bottom: 16px;
+            max-width: 85%;
+            line-height: 1.6;
+            animation: fadeIn 0.3s ease-in;
+        }}
+        @keyframes fadeIn {{
+            from {{ opacity: 0; transform: translateY(10px); }}
+            to {{ opacity: 1; transform: translateY(0); }}
         }}
         .message-user {{
-            background-color: var(--primary-color);
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
             margin-left: auto;
+            color: white;
+            box-shadow: 0 4px 15px rgba(79, 70, 229, 0.3);
         }}
         .message-assistant {{
-            background-color: var(--bg-card);
-            border: 1px solid #3d3d4f;
+            background-color: #2a2a3d;
+            border: 1px solid #404055;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+        }}
+        .message-assistant ul {{
+            margin-bottom: 0;
+            padding-left: 20px;
+        }}
+        .message-assistant li {{
+            margin-bottom: 6px;
+        }}
+        .message-assistant strong {{
+            color: #a78bfa;
+        }}
+        .message-header {{
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 8px;
+            opacity: 0.7;
+        }}
+        .user-panel {{
+            background: linear-gradient(180deg, rgba(79, 70, 229, 0.1) 0%, transparent 100%);
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 16px;
+        }}
+        .user-avatar {{
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.25rem;
+            margin-right: 12px;
+        }}
+        .user-name {{
+            font-weight: 600;
+            font-size: 1rem;
+            margin-bottom: 2px;
+        }}
+        .user-role {{
+            font-size: 0.8rem;
+            opacity: 0.8;
         }}
         .role-badge {{
             display: inline-flex;
             align-items: center;
-            padding: 6px 12px;
-            border-radius: 20px;
+            padding: 8px 14px;
+            border-radius: 12px;
             font-size: 0.875rem;
+        }}
+        .chat-input-container {{
+            background-color: #2a2a3d;
+            border-radius: 12px;
+            padding: 4px;
+        }}
+        .chat-input {{
+            background-color: transparent !important;
+            border: none !important;
+            color: var(--text-primary) !important;
+        }}
+        .chat-input:focus {{
+            box-shadow: none !important;
+        }}
+        .suggestion-btn {{
+            background-color: rgba(79, 70, 229, 0.2);
+            border: 1px solid rgba(79, 70, 229, 0.3);
+            color: #a78bfa;
+            transition: all 0.2s;
+        }}
+        .suggestion-btn:hover {{
+            background-color: rgba(79, 70, 229, 0.4);
+            color: white;
         }}
         #graph-container {{
             height: 600px;
@@ -453,37 +529,50 @@ def get_chat_html() -> str:
 
             <!-- Main Content -->
             <div class="col-md-9 col-lg-10 p-4">
-                <div class="card h-100">
-                    <div class="card-header d-flex justify-content-between align-items-center">
-                        <h5 class="mb-0"><i class="bi bi-chat-dots me-2"></i>Project Assistant</h5>
+                <div class="card h-100 d-flex flex-column">
+                    <div class="card-header d-flex justify-content-between align-items-center py-3">
+                        <div class="d-flex align-items-center">
+                            <div class="bg-primary rounded-circle p-2 me-3">
+                                <i class="bi bi-robot text-white" style="font-size: 1.25rem;"></i>
+                            </div>
+                            <div>
+                                <h5 class="mb-0">Project Assistant</h5>
+                                <small class="text-secondary">AI-powered project insights</small>
+                            </div>
+                        </div>
                         <button class="btn btn-outline-secondary btn-sm" onclick="clearChat()">
-                            <i class="bi bi-trash me-1"></i>Clear
+                            <i class="bi bi-arrow-counterclockwise me-1"></i>New Chat
                         </button>
                     </div>
-                    <div class="card-body chat-container" id="chat-messages">
+                    <div class="card-body chat-container flex-grow-1" id="chat-messages">
                         <div class="message message-assistant">
-                            <strong>Assistant:</strong><br>
-                            Hello! I'm your project assistant for the ABC Inc. SAP S/4HANA Migration.
-                            I can help you with project status, metrics, risks, and forecasts.
-                            <br><br>
-                            <strong>Try asking:</strong>
-                            <ul class="mb-0 mt-2">
-                                <li>What is the current project status?</li>
-                                <li>How has velocity changed over time?</li>
-                                <li>What risks should we watch for?</li>
-                                <li>Simulate a team member departure</li>
-                            </ul>
+                            <div class="message-header">
+                                <i class="bi bi-robot me-1"></i> Assistant
+                            </div>
+                            <div>
+                                Hello! I'm your AI assistant for the <strong>ABC Inc. SAP S/4HANA Migration</strong> project.
+                                I can help you explore project data, analyze trends, and understand risks.
+                            </div>
+                            <div class="mt-3">
+                                <strong>Try asking:</strong>
+                                <ul class="mt-2">
+                                    <li>What is the current project status?</li>
+                                    <li>How has velocity changed over time?</li>
+                                    <li>What risks should we watch for?</li>
+                                    <li>Who left the project and why?</li>
+                                </ul>
+                            </div>
                         </div>
                     </div>
-                    <div class="card-footer">
-                        <div class="input-group">
-                            <input type="text" id="chat-input" class="form-control bg-dark text-light border-secondary"
+                    <div class="card-footer py-3">
+                        <div class="chat-input-container d-flex align-items-center">
+                            <input type="text" id="chat-input" class="form-control chat-input flex-grow-1"
                                    placeholder="Ask about the project..." onkeypress="handleKeyPress(event)">
-                            <button class="btn btn-primary" onclick="sendMessage()">
-                                <i class="bi bi-send"></i>
+                            <button class="btn btn-primary rounded-circle ms-2" onclick="sendMessage()" style="width: 44px; height: 44px;">
+                                <i class="bi bi-send-fill"></i>
                             </button>
                         </div>
-                        <div id="suggestions" class="mt-2">
+                        <div id="suggestions" class="mt-3">
                             <!-- Follow-up suggestions -->
                         </div>
                     </div>
@@ -500,13 +589,23 @@ def get_chat_html() -> str:
             window.location.href = '/login';
         }
 
-        // Display user info
+        // Get user display info with fallbacks
+        const userName = user.display_name || user.username || 'User';
+        const userRole = user.role_display || user.role || 'Team Member';
+        const userColor = user.color || '#6c757d';
+        const userIcon = user.icon || 'person-circle';
+
+        // Display user info with improved styling
         document.getElementById('user-info').innerHTML = `
-            <div class="role-badge" style="background-color: ${user.color}20; border: 1px solid ${user.color}">
-                <i class="bi bi-${user.icon} me-2" style="color: ${user.color}"></i>
-                <div>
-                    <strong>${user.display_name}</strong>
-                    <br><small>${user.role_display}</small>
+            <div class="user-panel">
+                <div class="d-flex align-items-center">
+                    <div class="user-avatar" style="background-color: ${userColor}30; color: ${userColor}">
+                        <i class="bi bi-${userIcon}"></i>
+                    </div>
+                    <div>
+                        <div class="user-name">${userName}</div>
+                        <div class="user-role" style="color: ${userColor}">${userRole}</div>
+                    </div>
                 </div>
             </div>
         `;
@@ -543,9 +642,12 @@ def get_chat_html() -> str:
                 // Show follow-up suggestions
                 if (data.follow_up_questions && data.follow_up_questions.length > 0) {
                     const suggestions = document.getElementById('suggestions');
-                    suggestions.innerHTML = data.follow_up_questions.map(q =>
-                        `<button class="btn btn-outline-secondary btn-sm me-2 mb-1" onclick="askQuestion('${q}')">${q}</button>`
-                    ).join('');
+                    suggestions.innerHTML = '<small class="text-secondary me-2"><i class="bi bi-lightbulb me-1"></i>Suggested:</small>' +
+                        data.follow_up_questions.map(q =>
+                            `<button class="btn suggestion-btn btn-sm me-2 mb-1" onclick="askQuestion('${q.replace(/'/g, "\\'")}')">${q}</button>`
+                        ).join('');
+                } else {
+                    document.getElementById('suggestions').innerHTML = '';
                 }
             } catch (error) {
                 addMessage('Error: ' + error.message, 'assistant');
@@ -556,17 +658,40 @@ def get_chat_html() -> str:
             const container = document.getElementById('chat-messages');
             const div = document.createElement('div');
             div.className = `message message-${role}`;
-            div.innerHTML = `<strong>${role === 'user' ? 'You' : 'Assistant'}:</strong><br>${formatMessage(text)}`;
+
+            const icon = role === 'user' ? 'person-fill' : 'robot';
+            const label = role === 'user' ? 'You' : 'Assistant';
+
+            div.innerHTML = `
+                <div class="message-header">
+                    <i class="bi bi-${icon} me-1"></i> ${label}
+                </div>
+                <div>${formatMessage(text)}</div>
+            `;
             container.appendChild(div);
             container.scrollTop = container.scrollHeight;
         }
 
         function formatMessage(text) {
+            if (!text) return '';
+
             // Convert markdown-like formatting
-            return text
+            let formatted = text
+                // Bold text
                 .replace(/\\*\\*(.+?)\\*\\*/g, '<strong>$1</strong>')
+                // Headers
+                .replace(/^### (.+)$/gm, '<h6 class="mt-3 mb-2">$1</h6>')
+                .replace(/^## (.+)$/gm, '<h5 class="mt-3 mb-2">$1</h5>')
+                // Newlines
                 .replace(/\\n/g, '<br>')
-                .replace(/- (.+)/g, '<li>$1</li>');
+                .replace(/\\n/g, '<br>')
+                // Lists - wrap in ul
+                .replace(/(<br>)?- (.+?)(<br>|$)/g, '<li>$2</li>');
+
+            // Wrap consecutive list items in ul
+            formatted = formatted.replace(/(<li>.*<\\/li>)+/g, '<ul class="mb-2">$&</ul>');
+
+            return formatted;
         }
 
         function askQuestion(q) {
@@ -576,7 +701,15 @@ def get_chat_html() -> str:
 
         async function clearChat() {
             await fetch(`/api/chat/clear/${sessionId}`, {method: 'POST'});
-            document.getElementById('chat-messages').innerHTML = '';
+            const container = document.getElementById('chat-messages');
+            container.innerHTML = `
+                <div class="message message-assistant">
+                    <div class="message-header">
+                        <i class="bi bi-robot me-1"></i> Assistant
+                    </div>
+                    <div>Chat cleared. How can I help you with the project?</div>
+                </div>
+            `;
         }
 
         function logout() {
@@ -683,10 +816,23 @@ def get_graph_html() -> str:
 
         if (!sessionId) window.location.href = '/login';
 
+        // Get user display info with fallbacks
+        const userName = user.display_name || user.username || 'User';
+        const userRole = user.role_display || user.role || 'Team Member';
+        const userColor = user.color || '#6c757d';
+        const userIcon = user.icon || 'person-circle';
+
         document.getElementById('user-info').innerHTML = `
-            <div class="role-badge" style="background-color: ${user.color}20; border: 1px solid ${user.color}">
-                <i class="bi bi-${user.icon} me-2" style="color: ${user.color}"></i>
-                ${user.display_name}
+            <div class="user-panel">
+                <div class="d-flex align-items-center">
+                    <div class="user-avatar" style="background-color: ${userColor}30; color: ${userColor}">
+                        <i class="bi bi-${userIcon}"></i>
+                    </div>
+                    <div>
+                        <div class="user-name">${userName}</div>
+                        <div class="user-role" style="color: ${userColor}">${userRole}</div>
+                    </div>
+                </div>
             </div>
         `;
 
@@ -980,10 +1126,23 @@ def get_dashboard_html() -> str:
 
         if (!sessionId) window.location.href = '/login';
 
+        // Get user display info with fallbacks
+        const userName = user.display_name || user.username || 'User';
+        const userRole = user.role_display || user.role || 'Team Member';
+        const userColor = user.color || '#6c757d';
+        const userIcon = user.icon || 'person-circle';
+
         document.getElementById('user-info').innerHTML = `
-            <div class="role-badge" style="background-color: ${user.color}20; border: 1px solid ${user.color}">
-                <i class="bi bi-${user.icon} me-2" style="color: ${user.color}"></i>
-                ${user.display_name}
+            <div class="user-panel">
+                <div class="d-flex align-items-center">
+                    <div class="user-avatar" style="background-color: ${userColor}30; color: ${userColor}">
+                        <i class="bi bi-${userIcon}"></i>
+                    </div>
+                    <div>
+                        <div class="user-name">${userName}</div>
+                        <div class="user-role" style="color: ${userColor}">${userRole}</div>
+                    </div>
+                </div>
             </div>
         `;
 
@@ -1140,10 +1299,23 @@ def get_simulation_html() -> str:
 
         if (!sessionId) window.location.href = '/login';
 
+        // Get user display info with fallbacks
+        const userName = user.display_name || user.username || 'User';
+        const userRole = user.role_display || user.role || 'Team Member';
+        const userColor = user.color || '#6c757d';
+        const userIcon = user.icon || 'person-circle';
+
         document.getElementById('user-info').innerHTML = `
-            <div class="role-badge" style="background-color: ${user.color}20; border: 1px solid ${user.color}">
-                <i class="bi bi-${user.icon} me-2" style="color: ${user.color}"></i>
-                ${user.display_name}
+            <div class="user-panel">
+                <div class="d-flex align-items-center">
+                    <div class="user-avatar" style="background-color: ${userColor}30; color: ${userColor}">
+                        <i class="bi bi-${userIcon}"></i>
+                    </div>
+                    <div>
+                        <div class="user-name">${userName}</div>
+                        <div class="user-role" style="color: ${userColor}">${userRole}</div>
+                    </div>
+                </div>
             </div>
         `;
 
