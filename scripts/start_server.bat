@@ -18,7 +18,7 @@ echo.
 cd /d "%~dp0.."
 
 REM Check if port is in use
-netstat -ano | findstr ":%PORT% " | findstr "LISTENING" >/dev/null 2>&1
+netstat -ano | findstr ":%PORT% " | findstr "LISTENING" >NUL 2>&1
 if %ERRORLEVEL%==0 (
     echo ERROR: Port %PORT% is already in use!
     echo Run stop_server.bat first or use a different port.

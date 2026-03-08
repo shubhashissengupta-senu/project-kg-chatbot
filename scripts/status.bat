@@ -14,7 +14,7 @@ echo ========================================
 echo.
 
 REM Check if server is running
-netstat -ano | findstr ":%PORT% " | findstr "LISTENING" >/dev/null 2>&1
+netstat -ano | findstr ":%PORT% " | findstr "LISTENING" >NUL 2>&1
 if %ERRORLEVEL%==0 (
     echo Status: RUNNING
     echo.

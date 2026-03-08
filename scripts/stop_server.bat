@@ -16,7 +16,7 @@ echo.
 REM Find and kill process on the port
 for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":%PORT% " ^| findstr "LISTENING"') do (
     echo Stopping process %%a on port %PORT%...
-    taskkill /F /PID %%a >/dev/null 2>&1
+    taskkill /F /PID %%a >NUL 2>&1
     if %ERRORLEVEL%==0 (
         echo Server stopped successfully.
     ) else (
