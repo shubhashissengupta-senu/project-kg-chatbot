@@ -101,6 +101,49 @@
             background: linear-gradient(90deg, #667eea, #764ba2);
             border-radius: 4px;
         }
+        /* Narrative Card Styles */
+        .narrative-card {
+            background: linear-gradient(135deg, rgba(102,126,234,0.15) 0%, rgba(118,75,162,0.15) 100%);
+            border: 1px solid rgba(102,126,234,0.3);
+            border-radius: 12px;
+            padding: 20px 24px;
+            margin-bottom: 24px;
+            display: flex;
+            gap: 20px;
+            align-items: flex-start;
+        }
+        .narrative-icon {
+            font-size: 32px;
+            line-height: 1;
+            flex-shrink: 0;
+        }
+        .narrative-content {
+            flex: 1;
+        }
+        .narrative-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: #fff;
+            margin-bottom: 8px;
+        }
+        .narrative-text {
+            font-size: 14px;
+            line-height: 1.6;
+            color: #bbb;
+        }
+        .narrative-text strong {
+            color: #fff;
+        }
+        .narrative-text .highlight {
+            color: #667eea;
+            font-weight: 500;
+        }
+        .narrative-text .warning {
+            color: #feca57;
+        }
+        .narrative-text .success {
+            color: #4ecdc4;
+        }
         /* Milestone Tooltip Styles */
         .milestone-item {
             position: relative;
@@ -224,7 +267,15 @@
     <div class="main">
         <div class="header">
             <h2>Project Dashboard</h2>
-            <p>ABC Inc. SAP S/4HANA Migration - As of March 7, 2026</p>
+            <p>ABC Inc. SAP S/4HANA Migration - As of March 8, 2026</p>
+        </div>
+
+        <div class="narrative-card" id="narrativeCard">
+            <div class="narrative-icon" id="narrativeIcon">📊</div>
+            <div class="narrative-content">
+                <div class="narrative-title" id="narrativeTitle">Loading...</div>
+                <div class="narrative-text" id="narrativeText"></div>
+            </div>
         </div>
 
         <div class="grid" id="metricsGrid">
@@ -497,6 +548,48 @@
             const header = document.querySelector('.header p');
             header.innerHTML += `<br><span style="color:#667eea;font-size:12px;">${roleMessages[roleName]}</span>`;
         }
+
+        // Role-specific narratives
+        const narratives = {
+            'qa_director': {
+                icon: '🔍',
+                title: 'Quality Assessment Summary',
+                text: `The project has shown <span class="success">steady quality improvement</span> over the past 3 months, with test pass rates rising from 82% to 91%.
+                       <strong>Stream 1 (SD)</strong> maintains excellent quality metrics with 96% test coverage.
+                       <span class="warning">Stream 2 (EWM)</span> requires attention - the Voice Picking integration (CR-001) introduced complexity that needs thorough regression testing before UAT.
+                       Recommend additional QA focus on EWM modules in the next 2 weeks.`
+            },
+            'delivery_lead': {
+                icon: '🎯',
+                title: 'Delivery Status Overview',
+                text: `Project recovered from <span class="warning">Red status</span> in January following Mousumi's departure.
+                       <strong>Stream 1</strong> is on track for April 6 go-live with 92% completion.
+                       <strong>Stream 2</strong> remains at risk - Nayan's onboarding and Sandeep's consulting engagement accelerated recovery, but the April 22 deadline is tight.
+                       <span class="highlight">Key focus:</span> Complete Voice Picking integration by April 10 and ensure UAT readiness for both streams.`
+            },
+            'onsite_lead': {
+                icon: '👥',
+                title: 'Team & Operations Update',
+                text: `Team velocity has <span class="success">increased 12%</span> this sprint, reaching 210 story points.
+                       <strong>Staffing update:</strong> Lakshmi's last day is March 6 - UI handover to Priya is complete.
+                       <span class="warning">Watch items:</span> Raj returned from medical leave in January and is back to full productivity.
+                       Daily standups show good collaboration between offshore and onsite teams on CR-002 (Executive Dashboard).`
+            },
+            'auditor': {
+                icon: '💰',
+                title: 'Financial Health Summary',
+                text: `Project budget utilization at <span class="success">78%</span> ($1.44M of $1.85M) with healthy margin trajectory.
+                       <strong>CR Impact:</strong> Three approved change requests added $146K revenue, improving margin from 0% to 7.6%.
+                       <span class="highlight">CPI at 1.02</span> indicates cost efficiency.
+                       Forecast shows project will complete within budget with projected final margin of 8-10% assuming no additional scope changes.`
+            }
+        };
+
+        // Set narrative based on role
+        const narrative = narratives[roleName] || narratives['delivery_lead'];
+        document.getElementById('narrativeIcon').textContent = narrative.icon;
+        document.getElementById('narrativeTitle').textContent = narrative.title;
+        document.getElementById('narrativeText').innerHTML = narrative.text;
 
         // Velocity Chart
         Plotly.newPlot('velocityChart', [{
