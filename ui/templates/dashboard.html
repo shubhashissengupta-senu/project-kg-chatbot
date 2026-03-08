@@ -101,6 +101,111 @@
             background: linear-gradient(90deg, #667eea, #764ba2);
             border-radius: 4px;
         }
+        /* Milestone Tooltip Styles */
+        .milestone-item {
+            position: relative;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .milestone-item:hover {
+            background: rgba(102,126,234,0.1);
+            border-radius: 8px;
+            margin: 0 -12px;
+            padding: 12px 12px;
+        }
+        .milestone-tooltip {
+            display: none;
+            position: absolute;
+            left: 0;
+            right: 0;
+            top: 100%;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            border: 1px solid rgba(102,126,234,0.3);
+            border-radius: 12px;
+            padding: 16px;
+            z-index: 100;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+            margin-top: 8px;
+        }
+        .milestone-item:hover .milestone-tooltip {
+            display: block;
+            animation: tooltipFade 0.2s ease-out;
+        }
+        @keyframes tooltipFade {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .tooltip-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 12px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+        .tooltip-header .icon {
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+        }
+        .tooltip-header .icon.green { background: rgba(78,205,196,0.2); }
+        .tooltip-header .icon.amber { background: rgba(254,202,87,0.2); }
+        .tooltip-header h4 { font-size: 14px; margin: 0; }
+        .tooltip-section { margin-bottom: 10px; }
+        .tooltip-section:last-child { margin-bottom: 0; }
+        .tooltip-section h5 {
+            font-size: 11px;
+            color: #888;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 6px;
+        }
+        .tooltip-section p {
+            font-size: 13px;
+            line-height: 1.5;
+            color: #ccc;
+        }
+        .tooltip-metrics {
+            display: flex;
+            gap: 16px;
+            margin-top: 10px;
+        }
+        .tooltip-metric {
+            flex: 1;
+            background: rgba(255,255,255,0.05);
+            padding: 8px 12px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        .tooltip-metric .value {
+            font-size: 18px;
+            font-weight: bold;
+            color: #fff;
+        }
+        .tooltip-metric .label {
+            font-size: 10px;
+            color: #888;
+            text-transform: uppercase;
+        }
+        .tooltip-factors {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-top: 8px;
+        }
+        .factor-tag {
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 500;
+        }
+        .factor-tag.positive { background: rgba(78,205,196,0.2); color: #4ecdc4; }
+        .factor-tag.negative { background: rgba(255,107,107,0.2); color: #ff6b6b; }
+        .factor-tag.neutral { background: rgba(254,202,87,0.2); color: #feca57; }
     </style>
 </head>
 <body>
@@ -177,34 +282,174 @@
         </div>
 
         <div class="chart-card">
-            <h3>Upcoming Milestones</h3>
+            <h3>Upcoming Milestones <span style="font-size:12px;color:#888;font-weight:normal;">(hover for details)</span></h3>
+
+            <!-- Stream 1 UAT Start -->
             <div class="milestone-item">
                 <div>
                     <strong>Stream 1 UAT Start</strong>
-                    <div style="font-size:13px;color:#888;">March 23, 2026</div>
+                    <div style="font-size:13px;color:#888;">March 23, 2026 (15 days)</div>
                 </div>
                 <span class="status-badge status-green">On Track</span>
+                <div class="milestone-tooltip">
+                    <div class="tooltip-header">
+                        <div class="icon green">✓</div>
+                        <h4>Stream 1 UAT - High Confidence</h4>
+                    </div>
+                    <div class="tooltip-section">
+                        <h5>AI Assessment</h5>
+                        <p>Sales & Distribution module is well-positioned for UAT. The team has completed 92% of development work with strong test coverage. Ryan's leadership and consistent velocity make this milestone highly achievable.</p>
+                    </div>
+                    <div class="tooltip-metrics">
+                        <div class="tooltip-metric">
+                            <div class="value">92%</div>
+                            <div class="label">Complete</div>
+                        </div>
+                        <div class="tooltip-metric">
+                            <div class="value">96%</div>
+                            <div class="label">Test Pass</div>
+                        </div>
+                        <div class="tooltip-metric">
+                            <div class="value">85%</div>
+                            <div class="label">Confidence</div>
+                        </div>
+                    </div>
+                    <div class="tooltip-section">
+                        <h5>Contributing Factors</h5>
+                        <div class="tooltip-factors">
+                            <span class="factor-tag positive">Strong velocity</span>
+                            <span class="factor-tag positive">Low defect rate</span>
+                            <span class="factor-tag positive">Stable team</span>
+                            <span class="factor-tag neutral">CR-002 in progress</span>
+                        </div>
+                    </div>
+                </div>
             </div>
+
+            <!-- Stream 2 UAT Start -->
             <div class="milestone-item">
                 <div>
                     <strong>Stream 2 UAT Start</strong>
-                    <div style="font-size:13px;color:#888;">April 1, 2026</div>
+                    <div style="font-size:13px;color:#888;">April 1, 2026 (24 days)</div>
                 </div>
                 <span class="status-badge status-amber">At Risk</span>
+                <div class="milestone-tooltip">
+                    <div class="tooltip-header">
+                        <div class="icon amber">⚠</div>
+                        <h4>Stream 2 UAT - Moderate Risk</h4>
+                    </div>
+                    <div class="tooltip-section">
+                        <h5>AI Assessment</h5>
+                        <p>EWM module faces challenges from Mousumi's departure (Jan 23) and ongoing Voice Picking integration (CR-001). While Nayan and consultant Sandeep have accelerated recovery, the 68% completion rate leaves limited buffer. Close monitoring required.</p>
+                    </div>
+                    <div class="tooltip-metrics">
+                        <div class="tooltip-metric">
+                            <div class="value">68%</div>
+                            <div class="label">Complete</div>
+                        </div>
+                        <div class="tooltip-metric">
+                            <div class="value">84%</div>
+                            <div class="label">Test Pass</div>
+                        </div>
+                        <div class="tooltip-metric">
+                            <div class="value">68%</div>
+                            <div class="label">Confidence</div>
+                        </div>
+                    </div>
+                    <div class="tooltip-section">
+                        <h5>Risk Factors</h5>
+                        <div class="tooltip-factors">
+                            <span class="factor-tag negative">Mousumi departed</span>
+                            <span class="factor-tag negative">Voice picking pending</span>
+                            <span class="factor-tag neutral">Lakshmi leaving Mar 6</span>
+                            <span class="factor-tag positive">Nayan ramped up</span>
+                        </div>
+                    </div>
+                </div>
             </div>
+
+            <!-- Stream 1 Go-Live -->
             <div class="milestone-item">
                 <div>
                     <strong>Stream 1 Go-Live</strong>
-                    <div style="font-size:13px;color:#888;">April 6, 2026</div>
+                    <div style="font-size:13px;color:#888;">April 6, 2026 (29 days)</div>
                 </div>
                 <span class="status-badge status-green">On Track</span>
+                <div class="milestone-tooltip">
+                    <div class="tooltip-header">
+                        <div class="icon green">✓</div>
+                        <h4>Stream 1 Go-Live - On Schedule</h4>
+                    </div>
+                    <div class="tooltip-section">
+                        <h5>AI Assessment</h5>
+                        <p>With UAT starting March 23, the 2-week UAT window is adequate for the SD module scope. Historical data shows the team consistently meets deadlines. Executive Dashboard (CR-002) development is parallelized to avoid impacting core delivery.</p>
+                    </div>
+                    <div class="tooltip-metrics">
+                        <div class="tooltip-metric">
+                            <div class="value">14</div>
+                            <div class="label">UAT Days</div>
+                        </div>
+                        <div class="tooltip-metric">
+                            <div class="value">3</div>
+                            <div class="label">Open Defects</div>
+                        </div>
+                        <div class="tooltip-metric">
+                            <div class="value">81%</div>
+                            <div class="label">Confidence</div>
+                        </div>
+                    </div>
+                    <div class="tooltip-section">
+                        <h5>Success Factors</h5>
+                        <div class="tooltip-factors">
+                            <span class="factor-tag positive">Client aligned</span>
+                            <span class="factor-tag positive">QA approved</span>
+                            <span class="factor-tag positive">Infra ready</span>
+                            <span class="factor-tag neutral">CR-002 parallel track</span>
+                        </div>
+                    </div>
+                </div>
             </div>
+
+            <!-- Stream 2 Go-Live -->
             <div class="milestone-item">
                 <div>
                     <strong>Stream 2 Go-Live</strong>
-                    <div style="font-size:13px;color:#888;">April 22, 2026</div>
+                    <div style="font-size:13px;color:#888;">April 22, 2026 (45 days)</div>
                 </div>
                 <span class="status-badge status-amber">At Risk</span>
+                <div class="milestone-tooltip">
+                    <div class="tooltip-header">
+                        <div class="icon amber">⚠</div>
+                        <h4>Stream 2 Go-Live - Requires Attention</h4>
+                    </div>
+                    <div class="tooltip-section">
+                        <h5>AI Assessment</h5>
+                        <p>The April 22 date was set during Feb Client Review after assessing recovery from Red status. Key dependencies: Voice Picking integration must complete by Apr 10, and EWM UAT defect resolution needs dedicated focus. The 3-week UAT window is tight but achievable with current recovery trajectory.</p>
+                    </div>
+                    <div class="tooltip-metrics">
+                        <div class="tooltip-metric">
+                            <div class="value">21</div>
+                            <div class="label">UAT Days</div>
+                        </div>
+                        <div class="tooltip-metric">
+                            <div class="value">8</div>
+                            <div class="label">Open Defects</div>
+                        </div>
+                        <div class="tooltip-metric">
+                            <div class="value">68%</div>
+                            <div class="label">Confidence</div>
+                        </div>
+                    </div>
+                    <div class="tooltip-section">
+                        <h5>Critical Dependencies</h5>
+                        <div class="tooltip-factors">
+                            <span class="factor-tag negative">Voice picking by Apr 10</span>
+                            <span class="factor-tag negative">8 defects to fix</span>
+                            <span class="factor-tag neutral">Client sign-off pending</span>
+                            <span class="factor-tag positive">Recovery on track</span>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
