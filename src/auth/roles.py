@@ -217,10 +217,10 @@ class RoleManager:
     def _initialize_demo_users(self):
         """Create demo users for each role"""
         demo_users = [
-            ("roshan", "Roshan Arora", "qa_director", "demo123", "roshan@accenture.com"),
-            ("krutika", "Krutika Sharma", "delivery_lead", "demo123", "krutika@accenture.com"),
-            ("tara", "Tara Minsky", "onsite_lead", "demo123", "tara@accenture.com"),
-            ("rick", "Rick Stratford", "auditor", "demo123", "rick@accenture.com"),
+            ("roshan", "Roshan Arora", "qa_director", "Acc1234$$", "roshan@accenture.com"),
+            ("krutika", "Krutika Sharma", "delivery_lead", "Acc1234$$", "krutika@accenture.com"),
+            ("tara", "Tara Minsky", "onsite_lead", "Acc1234$$", "tara@accenture.com"),
+            ("rick", "Rick Stratford", "auditor", "Acc1234$$", "rick@accenture.com"),
         ]
 
         for username, display_name, role, password, email in demo_users:
