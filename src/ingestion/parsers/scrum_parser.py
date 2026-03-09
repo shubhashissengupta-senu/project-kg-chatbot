@@ -152,7 +152,7 @@ class ScrumMeetingParser(BaseParser):
             ))
 
             # ASSIGNED_TO relationship
-            if task.assignee:
+            if task.assignee and self._is_valid_person_name(task.assignee):
                 assignee_id = f"PERSON_{task.assignee.upper().replace(' ', '_')}"
                 relationships.append(ParsedRelationship(
                     relation_type="ASSIGNED_TO",
@@ -185,7 +185,7 @@ class ScrumMeetingParser(BaseParser):
                 to_entity=meeting_id
             ))
 
-            if risk.owner:
+            if risk.owner and self._is_valid_person_name(risk.owner):
                 owner_id = f"PERSON_{risk.owner.upper().replace(' ', '_')}"
                 relationships.append(ParsedRelationship(
                     relation_type="OWNS",
@@ -216,7 +216,7 @@ class ScrumMeetingParser(BaseParser):
                 to_entity=meeting_id
             ))
 
-            if action.owner:
+            if action.owner and self._is_valid_person_name(action.owner):
                 owner_id = f"PERSON_{action.owner.upper().replace(' ', '_')}"
                 relationships.append(ParsedRelationship(
                     relation_type="ASSIGNED_TO",
@@ -430,3 +430,16 @@ class ScrumMeetingParser(BaseParser):
             metrics['completion'] = float(completion_match.group(1))
 
         return metrics
+
+    def _is_valid_person_name(self, name: str) -> bool:
+        """Check if a string looks like a valid person name (not a status/severity value)"""
+        if not name:
+            return False
+        name_lower = name.lower().strip()
+        # Exclude common non-name values that might appear in risk/task tables
+        invalid_values = {
+            'high', 'medium', 'low', 'critical', 'minor', 'major',
+            'open', 'closed', 'done', 'pending', 'blocked', 'n/a', 'na', 'tbd',
+            'yes', 'no', 'none', 'green', 'amber', 'red', 'yellow'
+        }
+        return name_lower not in invalid_values
