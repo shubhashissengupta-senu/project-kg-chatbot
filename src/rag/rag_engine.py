@@ -1,15 +1,18 @@
 """
 RAG Engine
 Combines retrieval with LLM-powered response generation.
+Supports hybrid retrieval using ChromaDB vectors and TF-IDF.
 """
 
 from typing import List, Dict, Optional, TYPE_CHECKING
 from dataclasses import dataclass
 from pathlib import Path
 import logging
+import os
 
 from .document_store import DocumentStore
 from .retriever import DocumentRetriever, RetrievalResult
+from .vector_store import ChromaVectorStore, VectorSearchResult
 
 if TYPE_CHECKING:
     from ..llm.llm_service import LLMService
@@ -29,15 +32,22 @@ class RAGResponse:
 class RAGEngine:
     """
     RAG Engine for answering ad-hoc questions.
-    Uses TF-IDF retrieval with LLM-powered response generation.
-    Falls back to template-based responses when LLM is unavailable.
+    Uses hybrid retrieval (ChromaDB vectors + TF-IDF) with LLM-powered response generation.
+    Falls back to TF-IDF only and template-based responses when components unavailable.
     """
 
-    def __init__(self, data_directory: Optional[Path] = None, llm_service: "LLMService" = None):
+    def __init__(
+        self,
+        data_directory: Optional[Path] = None,
+        llm_service: "LLMService" = None,
+        use_vector_store: bool = True
+    ):
         self.store = DocumentStore(chunk_size=600, chunk_overlap=100)
         self.retriever: Optional[DocumentRetriever] = None
+        self.vector_store: Optional[ChromaVectorStore] = None
         self.llm = llm_service
         self.is_initialized = False
+        self.use_vector_store = use_vector_store
 
         if data_directory:
             self.initialize(data_directory)
@@ -45,17 +55,43 @@ class RAGEngine:
     def initialize(self, data_directory: Path) -> int:
         """Initialize the RAG engine with documents"""
         data_directory = Path(data_directory)
-        count = self.store.load_directory(data_directory)
+
+        # Load documents into document store
+        doc_count = self.store.load_directory(data_directory)
+        chunk_count = len(self.store.get_all_chunks())
+
+        # Initialize TF-IDF retriever
         self.retriever = DocumentRetriever(self.store)
+
+        # Initialize vector store if enabled
+        if self.use_vector_store:
+            try:
+                self.vector_store = ChromaVectorStore(self.store)
+                if self.vector_store.is_initialized:
+                    indexed = self.vector_store.index_documents()
+                    logger.info(f"Vector store indexed {indexed} chunks")
+                else:
+                    logger.warning("Vector store initialization failed, using TF-IDF only")
+                    self.vector_store = None
+            except Exception as e:
+                logger.warning(f"Failed to initialize vector store: {e}")
+                self.vector_store = None
+
         self.is_initialized = True
-        return count
+        return chunk_count
 
     def set_llm_service(self, llm_service: "LLMService"):
         """Set or update the LLM service"""
         self.llm = llm_service
         logger.info(f"LLM service configured: {llm_service.is_available()}")
 
-    def query(self, question: str, top_k: int = 5, allowed_doc_types: List[str] = None) -> RAGResponse:
+    def query(
+        self,
+        question: str,
+        top_k: int = 5,
+        allowed_doc_types: List[str] = None,
+        use_hybrid: bool = True
+    ) -> RAGResponse:
         """
         Answer a question using RAG.
 
@@ -63,6 +99,7 @@ class RAGEngine:
             question: User's question
             top_k: Number of chunks to retrieve
             allowed_doc_types: List of document types user can access (for RBAC)
+            use_hybrid: Whether to use hybrid retrieval (vector + TF-IDF)
 
         Returns:
             RAGResponse with answer and sources
@@ -75,18 +112,11 @@ class RAGEngine:
                 query=question
             )
 
-        # Retrieve relevant chunks
-        results = self.retriever.retrieve(question, top_k=top_k * 2)  # Get more to filter
-
-        # Apply RBAC filtering if allowed_doc_types is specified
-        if allowed_doc_types:
-            results = [
-                r for r in results
-                if r.chunk.metadata.get('document_type', 'General') in allowed_doc_types
-            ]
-
-        # Limit to top_k after filtering
-        results = results[:top_k]
+        # Retrieve relevant chunks using hybrid or TF-IDF only
+        if use_hybrid and self.vector_store and self.vector_store.is_initialized:
+            results = self._hybrid_retrieve(question, top_k, allowed_doc_types)
+        else:
+            results = self._tfidf_retrieve(question, top_k, allowed_doc_types)
 
         if not results:
             return RAGResponse(
@@ -107,6 +137,68 @@ class RAGEngine:
             confidence=confidence,
             query=question
         )
+
+    def _hybrid_retrieve(
+        self,
+        question: str,
+        top_k: int,
+        allowed_doc_types: List[str] = None
+    ) -> List[RetrievalResult]:
+        """Hybrid retrieval combining vector search and TF-IDF"""
+
+        # Get TF-IDF results
+        tfidf_results = self.retriever.retrieve(question, top_k=top_k * 2)
+
+        # Apply RBAC filtering to TF-IDF results
+        if allowed_doc_types:
+            tfidf_results = [
+                r for r in tfidf_results
+                if r.chunk.metadata.get('document_type', 'General') in allowed_doc_types
+            ]
+
+        # Get vector search results with RBAC filtering
+        vector_results = self.vector_store.search(
+            question,
+            top_k=top_k * 2,
+            filter_doc_types=allowed_doc_types
+        )
+
+        # Combine using hybrid search
+        hybrid_results = self.vector_store.hybrid_search(
+            question,
+            tfidf_results,
+            top_k=top_k,
+            vector_weight=0.6  # Slightly favor semantic similarity
+        )
+
+        # Convert VectorSearchResult to RetrievalResult format
+        results = []
+        for vr in hybrid_results:
+            results.append(RetrievalResult(
+                chunk=vr.chunk,
+                score=vr.score,
+                match_terms=[]  # Hybrid doesn't track match terms
+            ))
+
+        return results
+
+    def _tfidf_retrieve(
+        self,
+        question: str,
+        top_k: int,
+        allowed_doc_types: List[str] = None
+    ) -> List[RetrievalResult]:
+        """TF-IDF only retrieval (fallback)"""
+        results = self.retriever.retrieve(question, top_k=top_k * 2)
+
+        # Apply RBAC filtering
+        if allowed_doc_types:
+            results = [
+                r for r in results
+                if r.chunk.metadata.get('document_type', 'General') in allowed_doc_types
+            ]
+
+        return results[:top_k]
 
     def _generate_response(self, question: str, results: List[RetrievalResult]) -> str:
         """Generate a response from retrieved chunks using LLM or fallback to templates"""
@@ -138,7 +230,7 @@ class RAGEngine:
 
         # Try LLM-based generation first
         if self.llm and self.llm.is_available():
-            logger.debug("Using LLM for response generation")
+            logger.debug(f"Using LLM ({self.llm.get_provider()}) for response generation")
             try:
                 return self.llm.generate_response(question, context)
             except Exception as e:
@@ -213,11 +305,6 @@ class RAGEngine:
         lines = [line for line in lines if line]
         content = '\n'.join(lines)
 
-        # Remove table formatting if present
-        if '|' in content and content.count('|') > 4:
-            # Keep table but clean it
-            pass
-
         return content
 
     def _format_sources(self, results: List[RetrievalResult]) -> List[Dict]:
@@ -251,18 +338,37 @@ class RAGEngine:
         top_scores = [r.score for r in results[:3]]
         avg_score = sum(top_scores) / len(top_scores)
 
-        # Normalize to 0-1 range (TF-IDF scores are typically small)
-        confidence = min(1.0, avg_score * 5)
+        # For hybrid retrieval, scores are already normalized (0-1)
+        # For TF-IDF only, normalize
+        if self.vector_store and self.vector_store.is_initialized:
+            confidence = avg_score
+        else:
+            confidence = min(1.0, avg_score * 5)
 
         # Boost if we have multiple good matches
-        if len(results) >= 3 and all(r.score > 0.05 for r in results[:3]):
+        if len(results) >= 3 and all(r.score > 0.3 for r in results[:3]):
             confidence = min(1.0, confidence * 1.2)
 
         return round(confidence, 2)
 
     def get_stats(self) -> Dict:
         """Get RAG engine statistics"""
-        return {
+        stats = {
             'initialized': self.is_initialized,
             **self.store.stats()
         }
+
+        if self.vector_store:
+            stats['vector_store'] = self.vector_store.get_stats()
+        else:
+            stats['vector_store'] = {'initialized': False, 'reason': 'Not enabled or failed to initialize'}
+
+        if self.llm:
+            stats['llm'] = {
+                'available': self.llm.is_available(),
+                'provider': self.llm.get_provider()
+            }
+        else:
+            stats['llm'] = {'available': False}
+
+        return stats

@@ -1,6 +1,7 @@
 """
 LLM Service
 Provides LLM-powered query understanding and response generation.
+Supports Azure OpenAI (default) with fallback to Anthropic or TF-IDF.
 """
 
 import os
@@ -14,47 +15,109 @@ logger = logging.getLogger(__name__)
 @dataclass
 class LLMConfig:
     """LLM configuration"""
-    provider: str = "anthropic"
-    model: str = "claude-sonnet-4-20250514"
-    api_key: Optional[str] = None
+    provider: str = None  # Will be set from env or default to azure_openai
+
+    # Azure OpenAI settings
+    azure_endpoint: Optional[str] = None
+    azure_api_key: Optional[str] = None
+    azure_api_version: str = "2025-01-01-preview"
+    azure_deployment: str = "gpt-5-chat"
+
+    # Anthropic settings (fallback)
+    anthropic_api_key: Optional[str] = None
+    anthropic_model: str = "claude-sonnet-4-20250514"
+
+    # Common settings
     max_tokens: int = 2048
     temperature: float = 0.3
 
     def __post_init__(self):
-        if not self.api_key:
-            self.api_key = os.getenv("ANTHROPIC_API_KEY")
+        # Load from environment variables
+        self.provider = self.provider or os.getenv("LLM_PROVIDER", "azure_openai")
+
+        # Azure OpenAI
+        self.azure_endpoint = self.azure_endpoint or os.getenv("AZURE_OPENAI_ENDPOINT")
+        self.azure_api_key = self.azure_api_key or os.getenv("AZURE_OPENAI_API_KEY")
+        self.azure_api_version = os.getenv("AZURE_OPENAI_API_VERSION", self.azure_api_version)
+        self.azure_deployment = os.getenv("AZURE_OPENAI_DEPLOYMENT", self.azure_deployment)
+
+        # Anthropic (fallback)
+        self.anthropic_api_key = self.anthropic_api_key or os.getenv("ANTHROPIC_API_KEY")
 
 
 class LLMService:
     """
     LLM Service for intelligent query processing and response generation.
-    Supports Anthropic Claude API.
+    Supports Azure OpenAI (primary) and Anthropic Claude (fallback).
     """
 
     def __init__(self, config: LLMConfig = None):
         self.config = config or LLMConfig()
         self.client = None
+        self.provider_name = None
         self._initialize_client()
 
     def _initialize_client(self):
-        """Initialize the LLM client"""
-        if not self.config.api_key:
-            logger.warning("No API key provided. LLM features will be disabled.")
+        """Initialize the LLM client based on provider preference"""
+        # Try Azure OpenAI first (primary)
+        if self.config.provider == "azure_openai" and self._init_azure_openai():
             return
 
-        if self.config.provider == "anthropic":
-            try:
-                import anthropic
-                self.client = anthropic.Anthropic(api_key=self.config.api_key)
-                logger.info(f"Anthropic client initialized with model: {self.config.model}")
-            except ImportError:
-                logger.error("anthropic package not installed. Run: pip install anthropic")
-            except Exception as e:
-                logger.error(f"Failed to initialize Anthropic client: {e}")
+        # Fallback to Anthropic
+        if self._init_anthropic():
+            return
+
+        logger.warning("No LLM client initialized. Using template-based fallback.")
+
+    def _init_azure_openai(self) -> bool:
+        """Initialize Azure OpenAI client"""
+        if not self.config.azure_endpoint or not self.config.azure_api_key:
+            logger.info("Azure OpenAI credentials not provided")
+            return False
+
+        try:
+            from openai import AzureOpenAI
+            self.client = AzureOpenAI(
+                azure_endpoint=self.config.azure_endpoint,
+                api_key=self.config.azure_api_key,
+                api_version=self.config.azure_api_version
+            )
+            self.provider_name = "azure_openai"
+            logger.info(f"Azure OpenAI client initialized with deployment: {self.config.azure_deployment}")
+            return True
+        except ImportError:
+            logger.error("openai package not installed. Run: pip install openai")
+            return False
+        except Exception as e:
+            logger.error(f"Failed to initialize Azure OpenAI client: {e}")
+            return False
+
+    def _init_anthropic(self) -> bool:
+        """Initialize Anthropic client (fallback)"""
+        if not self.config.anthropic_api_key:
+            logger.info("Anthropic API key not provided")
+            return False
+
+        try:
+            import anthropic
+            self.client = anthropic.Anthropic(api_key=self.config.anthropic_api_key)
+            self.provider_name = "anthropic"
+            logger.info(f"Anthropic client initialized with model: {self.config.anthropic_model}")
+            return True
+        except ImportError:
+            logger.error("anthropic package not installed. Run: pip install anthropic")
+            return False
+        except Exception as e:
+            logger.error(f"Failed to initialize Anthropic client: {e}")
+            return False
 
     def is_available(self) -> bool:
         """Check if LLM service is available"""
         return self.client is not None
+
+    def get_provider(self) -> str:
+        """Get the current LLM provider name"""
+        return self.provider_name or "none"
 
     def generate_response(
         self,
@@ -99,19 +162,41 @@ Guidelines:
 Please provide a clear, helpful answer based on this context."""
 
         try:
-            response = self.client.messages.create(
-                model=self.config.model,
-                max_tokens=self.config.max_tokens,
-                temperature=self.config.temperature,
-                system=system,
-                messages=[
-                    {"role": "user", "content": user_message}
-                ]
-            )
-            return response.content[0].text
+            if self.provider_name == "azure_openai":
+                return self._generate_azure_openai(system, user_message)
+            elif self.provider_name == "anthropic":
+                return self._generate_anthropic(system, user_message)
+            else:
+                return self._fallback_response(query, context)
         except Exception as e:
             logger.error(f"LLM generation failed: {e}")
             return self._fallback_response(query, context)
+
+    def _generate_azure_openai(self, system: str, user_message: str) -> str:
+        """Generate response using Azure OpenAI"""
+        response = self.client.chat.completions.create(
+            model=self.config.azure_deployment,
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": user_message}
+            ],
+            max_tokens=self.config.max_tokens,
+            temperature=self.config.temperature
+        )
+        return response.choices[0].message.content
+
+    def _generate_anthropic(self, system: str, user_message: str) -> str:
+        """Generate response using Anthropic Claude"""
+        response = self.client.messages.create(
+            model=self.config.anthropic_model,
+            max_tokens=self.config.max_tokens,
+            temperature=self.config.temperature,
+            system=system,
+            messages=[
+                {"role": "user", "content": user_message}
+            ]
+        )
+        return response.content[0].text
 
     def generate_summary(
         self,
@@ -144,16 +229,12 @@ Data:
 Provide a well-formatted summary with key insights."""
 
         try:
-            response = self.client.messages.create(
-                model=self.config.model,
-                max_tokens=1024,
-                temperature=0.2,
-                system=system,
-                messages=[
-                    {"role": "user", "content": user_message}
-                ]
-            )
-            return response.content[0].text
+            if self.provider_name == "azure_openai":
+                return self._generate_azure_openai(system, user_message)
+            elif self.provider_name == "anthropic":
+                return self._generate_anthropic(system, user_message)
+            else:
+                return self._format_data_fallback(data)
         except Exception as e:
             logger.error(f"Summary generation failed: {e}")
             return self._format_data_fallback(data)
@@ -186,17 +267,14 @@ Respond with JSON:
 {{"intent": "type", "entities": [{{"type": "Person/Stream/Metric/etc", "value": "name"}}], "dates": ["any dates"], "confidence": 0.0-1.0}}"""
 
         try:
-            response = self.client.messages.create(
-                model=self.config.model,
-                max_tokens=512,
-                temperature=0.1,
-                system=system,
-                messages=[
-                    {"role": "user", "content": user_message}
-                ]
-            )
+            if self.provider_name == "azure_openai":
+                text = self._generate_azure_openai(system, user_message)
+            elif self.provider_name == "anthropic":
+                text = self._generate_anthropic(system, user_message)
+            else:
+                return {"intent": "unknown", "entities": [], "confidence": 0.0}
+
             import json
-            text = response.content[0].text
             # Extract JSON from response
             if "```json" in text:
                 text = text.split("```json")[1].split("```")[0]

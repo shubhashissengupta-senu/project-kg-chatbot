@@ -15,6 +15,10 @@ from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 
+# Load environment variables from .env file
+from dotenv import load_dotenv
+load_dotenv()
+
 # Setup logging
 logging.basicConfig(
     level=logging.INFO,
@@ -48,6 +52,7 @@ async def lifespan(app: FastAPI):
     from src.simulation.scenario_simulator import ScenarioSimulator
     from src.auth.roles import RoleManager
     from src.rag.rag_engine import RAGEngine
+    from src.llm.llm_service import LLMService, LLMConfig
 
     # Create role manager
     app.state.role_manager = RoleManager()
@@ -104,14 +109,24 @@ async def lifespan(app: FastAPI):
     forecaster = ProjectForecaster(metrics_store, query_engine)
     simulator = ScenarioSimulator(query_engine, metrics_store)
 
-    # Create RAG engine for ad-hoc queries
-    rag_engine = RAGEngine()
-    if data_dir:
-        doc_count = rag_engine.initialize(data_dir)
-        logger.info(f"RAG engine initialized with {doc_count} documents, {rag_engine.store.stats()['total_chunks']} chunks")
+    # Initialize LLM service (Azure OpenAI as default, fallback to TF-IDF)
+    llm_config = LLMConfig()
+    llm_service = LLMService(llm_config)
+    if llm_service.is_available():
+        logger.info(f"LLM service initialized with provider: {llm_service.get_provider()}")
+    else:
+        logger.warning("LLM service not available - using template-based responses")
 
-    # Create chat engine with RAG support
-    chat_engine = ChatEngine(query_engine, risk_predictor, metrics_store, rag_engine=rag_engine)
+    # Create RAG engine with vector store and LLM support
+    rag_engine = RAGEngine(llm_service=llm_service, use_vector_store=True)
+    if data_dir:
+        chunk_count = rag_engine.initialize(data_dir)
+        logger.info(f"RAG engine initialized with {rag_engine.store.stats()['total_documents']} documents, {chunk_count} chunks")
+        if rag_engine.vector_store and rag_engine.vector_store.is_initialized:
+            logger.info(f"Vector store: {rag_engine.vector_store.get_stats()['document_count']} embeddings indexed")
+
+    # Create chat engine with RAG and LLM support
+    chat_engine = ChatEngine(query_engine, risk_predictor, metrics_store, rag_engine=rag_engine, llm_client=llm_service)
 
     # Store in app state
     app.state.pipeline = pipeline

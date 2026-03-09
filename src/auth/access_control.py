@@ -101,8 +101,15 @@ class DataFilter:
             if self.can_view_metric(k)
         }
 
-    def filter_project_state(self, state: Dict) -> Dict:
+    def filter_project_state(self, state) -> Dict:
         """Filter complete project state based on permissions"""
+        # Handle non-dict inputs (e.g., list from timeline queries)
+        if not isinstance(state, dict):
+            # Wrap list in a dict for Pydantic compatibility
+            if isinstance(state, list):
+                return {"items": self._serialize_datetimes(state)}
+            return {"value": self._serialize_datetimes(state)} if state else {}
+
         filtered = {}
 
         # Always include timestamp and basic info
@@ -150,7 +157,31 @@ class DataFilter:
                 if self.can_view_entity(k)
             }
 
+        # Pass through entity lookup data (keys ending with "_related" or direct entity data)
+        # and convert datetime objects to ISO strings for JSON serialization
+        from datetime import datetime
+        for key, value in state.items():
+            if key not in filtered:
+                # Check if it's entity lookup data (not in standard project state keys)
+                standard_keys = {"timestamp", "snapshot_label", "team", "streams",
+                               "open_risks", "open_defects", "change_requests",
+                               "metrics", "entity_counts", "plan_type"}
+                if key not in standard_keys:
+                    # Serialize datetime objects in the value
+                    filtered[key] = self._serialize_datetimes(value)
+
         return filtered
+
+    def _serialize_datetimes(self, obj):
+        """Recursively convert datetime objects to ISO strings"""
+        from datetime import datetime
+        if isinstance(obj, datetime):
+            return obj.isoformat()
+        elif isinstance(obj, dict):
+            return {k: self._serialize_datetimes(v) for k, v in obj.items()}
+        elif isinstance(obj, list):
+            return [self._serialize_datetimes(item) for item in obj]
+        return obj
 
 
 class AccessController:
