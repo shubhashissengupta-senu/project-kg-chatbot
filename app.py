@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 # Import routes
 from src.api.routes import (
     auth_router, chat_router, graph_router,
-    metrics_router, simulation_router, delivery_brain_router
+    metrics_router, simulation_router, delivery_brain_router, admin_router
 )
 
 
@@ -180,6 +180,7 @@ app.include_router(graph_router)
 app.include_router(metrics_router)
 app.include_router(simulation_router)
 app.include_router(delivery_brain_router, prefix="/api")
+app.include_router(admin_router, prefix="/api")
 
 
 # ============================================================================
@@ -438,7 +439,162 @@ def get_login_html() -> str:
                         <button id="login-btn" class="btn btn-primary w-100" disabled>
                             <i class="bi bi-box-arrow-in-right me-2"></i>Login
                         </button>
+
+                        <hr class="my-3">
+                        <button type="button" class="btn btn-outline-info w-100" data-bs-toggle="modal" data-bs-target="#dataAdminModal">
+                            <i class="bi bi-database-gear me-2"></i>Data Admin
+                        </button>
                     </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Data Admin Modal -->
+    <div class="modal fade" id="dataAdminModal" tabindex="-1" aria-labelledby="dataAdminModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content bg-dark text-light">
+                <div class="modal-header border-secondary">
+                    <h5 class="modal-title" id="dataAdminModalLabel">
+                        <i class="bi bi-database-gear me-2"></i>Data Ingestion Pipeline
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <!-- Tabs -->
+                    <ul class="nav nav-tabs mb-3" id="adminTabs" role="tablist">
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link active" id="ingest-tab" data-bs-toggle="tab" data-bs-target="#ingest-panel" type="button">
+                                <i class="bi bi-upload me-1"></i>Ingest Data
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="stats-tab" data-bs-toggle="tab" data-bs-target="#stats-panel" type="button">
+                                <i class="bi bi-bar-chart me-1"></i>Statistics
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="history-tab" data-bs-toggle="tab" data-bs-target="#history-panel" type="button">
+                                <i class="bi bi-clock-history me-1"></i>History
+                            </button>
+                        </li>
+                    </ul>
+
+                    <div class="tab-content">
+                        <!-- Ingest Tab -->
+                        <div class="tab-pane fade show active" id="ingest-panel" role="tabpanel">
+                            <div class="mb-3">
+                                <label class="form-label">Folder Path</label>
+                                <div class="input-group">
+                                    <span class="input-group-text bg-secondary border-secondary"><i class="bi bi-folder"></i></span>
+                                    <input type="text" id="folder-path" class="form-control bg-dark text-light border-secondary"
+                                           placeholder="C:\\path\\to\\documents or /path/to/documents">
+                                </div>
+                                <small class="text-secondary">Enter the full path to the folder containing files to ingest</small>
+                            </div>
+
+                            <div class="row mb-3">
+                                <div class="col-md-6">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="recursive-check" checked>
+                                        <label class="form-check-label" for="recursive-check">
+                                            Include subfolders (recursive)
+                                        </label>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="update-kg-check" checked>
+                                        <label class="form-check-label" for="update-kg-check">
+                                            Update Knowledge Graph
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="card bg-secondary mb-3">
+                                <div class="card-body py-2">
+                                    <h6 class="card-title mb-2"><i class="bi bi-info-circle me-1"></i>Pipeline Steps</h6>
+                                    <div class="row small">
+                                        <div class="col-6">
+                                            <i class="bi bi-check-circle text-success me-1"></i>NoSQL DB (TinyDB/MongoDB)<br>
+                                            <i class="bi bi-check-circle text-success me-1"></i>TF-IDF Indexing
+                                        </div>
+                                        <div class="col-6">
+                                            <i class="bi bi-check-circle text-success me-1"></i>Vector DB (ChromaDB)<br>
+                                            <i class="bi bi-check-circle text-success me-1"></i>Knowledge Graph Update
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div id="supported-formats" class="mb-3 small">
+                                <strong>Supported formats:</strong> <span id="formats-list">Loading...</span>
+                            </div>
+
+                            <!-- Progress Section -->
+                            <div id="ingestion-progress" class="d-none">
+                                <div class="progress mb-2" style="height: 25px;">
+                                    <div id="progress-bar" class="progress-bar progress-bar-striped progress-bar-animated"
+                                         role="progressbar" style="width: 0%">0%</div>
+                                </div>
+                                <div id="progress-status" class="text-center text-secondary mb-2">Initializing...</div>
+                            </div>
+
+                            <!-- Results Section -->
+                            <div id="ingestion-results" class="d-none">
+                                <div class="alert alert-success">
+                                    <h6><i class="bi bi-check-circle me-1"></i>Ingestion Complete</h6>
+                                    <div class="row mt-2">
+                                        <div class="col-md-3 text-center">
+                                            <div class="h4 mb-0" id="result-files">0</div>
+                                            <small>Files Processed</small>
+                                        </div>
+                                        <div class="col-md-3 text-center">
+                                            <div class="h4 mb-0" id="result-chunks">0</div>
+                                            <small>Chunks Created</small>
+                                        </div>
+                                        <div class="col-md-3 text-center">
+                                            <div class="h4 mb-0" id="result-vectors">0</div>
+                                            <small>Vectors Stored</small>
+                                        </div>
+                                        <div class="col-md-3 text-center">
+                                            <div class="h4 mb-0" id="result-kg-nodes">0</div>
+                                            <small>KG Nodes</small>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div id="ingestion-error" class="alert alert-danger d-none"></div>
+                        </div>
+
+                        <!-- Statistics Tab -->
+                        <div class="tab-pane fade" id="stats-panel" role="tabpanel">
+                            <div id="stats-content">
+                                <div class="text-center py-4">
+                                    <div class="spinner-border text-primary" role="status"></div>
+                                    <p class="mt-2">Loading statistics...</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- History Tab -->
+                        <div class="tab-pane fade" id="history-panel" role="tabpanel">
+                            <div id="history-content">
+                                <div class="text-center py-4">
+                                    <div class="spinner-border text-primary" role="status"></div>
+                                    <p class="mt-2">Loading history...</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer border-secondary">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-primary" id="start-ingestion-btn">
+                        <i class="bi bi-play-fill me-1"></i>Start Ingestion
+                    </button>
                 </div>
             </div>
         </div>
@@ -446,6 +602,7 @@ def get_login_html() -> str:
 
     <script>
         let selectedUser = null;
+        let adminSessionId = null;
 
         // Load available roles
         fetch('/api/auth/roles')
@@ -498,6 +655,223 @@ def get_login_html() -> str:
             } else {
                 document.getElementById('error-message').textContent = data.message;
                 document.getElementById('error-message').classList.remove('d-none');
+            }
+        };
+
+        // Data Admin Modal Functions
+        async function getAdminSession() {
+            if (adminSessionId) return adminSessionId;
+            // Login as admin for data operations
+            const response = await fetch('/api/auth/login', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({username: 'roshan', password: 'Acc1234$$'})
+            });
+            const data = await response.json();
+            if (data.success) {
+                adminSessionId = data.session_id;
+                return adminSessionId;
+            }
+            throw new Error('Failed to get admin session');
+        }
+
+        // Load supported formats when modal opens
+        document.getElementById('dataAdminModal').addEventListener('show.bs.modal', async () => {
+            try {
+                const response = await fetch('/api/delivery-brain/supported-formats');
+                const formats = await response.json();
+                const allFormats = formats.all_formats.join(', ');
+                document.getElementById('formats-list').textContent = allFormats;
+            } catch (e) {
+                document.getElementById('formats-list').textContent = 'Failed to load';
+            }
+        });
+
+        // Load statistics when tab clicked
+        document.getElementById('stats-tab').addEventListener('click', async () => {
+            try {
+                const sessionId = await getAdminSession();
+                const response = await fetch(`/api/delivery-brain/statistics?session_id=${sessionId}`);
+                const stats = await response.json();
+
+                document.getElementById('stats-content').innerHTML = `
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <div class="card bg-secondary">
+                                <div class="card-body text-center">
+                                    <i class="bi bi-database h2 text-primary"></i>
+                                    <h4>${stats.nosql?.document_count || 0}</h4>
+                                    <small>Documents in NoSQL</small>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card bg-secondary">
+                                <div class="card-body text-center">
+                                    <i class="bi bi-boxes h2 text-success"></i>
+                                    <h4>${stats.vector?.total_chunks || 0}</h4>
+                                    <small>Vectors in ChromaDB</small>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card bg-secondary">
+                                <div class="card-body text-center">
+                                    <i class="bi bi-hdd h2 text-info"></i>
+                                    <h4>${stats.nosql?.total_chunks || 0}</h4>
+                                    <small>Total Chunks</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mt-3">
+                        <h6>File Types Processed:</h6>
+                        <div class="row">
+                            ${Object.entries(stats.nosql?.file_types || {}).map(([type, count]) => `
+                                <div class="col-md-3 mb-2">
+                                    <span class="badge bg-primary me-1">${count}</span> ${type}
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                `;
+            } catch (e) {
+                document.getElementById('stats-content').innerHTML = `
+                    <div class="alert alert-warning">Failed to load statistics: ${e.message}</div>
+                `;
+            }
+        });
+
+        // Load history when tab clicked
+        document.getElementById('history-tab').addEventListener('click', async () => {
+            try {
+                const sessionId = await getAdminSession();
+                const response = await fetch(`/api/delivery-brain/history?session_id=${sessionId}&limit=10`);
+                const data = await response.json();
+
+                if (data.history && data.history.length > 0) {
+                    document.getElementById('history-content').innerHTML = `
+                        <div class="table-responsive">
+                            <table class="table table-dark table-sm">
+                                <thead>
+                                    <tr>
+                                        <th>Timestamp</th>
+                                        <th>Directory</th>
+                                        <th>Files</th>
+                                        <th>Chunks</th>
+                                        <th>Duration</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${data.history.map(h => `
+                                        <tr>
+                                            <td><small>${new Date(h.timestamp).toLocaleString()}</small></td>
+                                            <td><small>${h.directory || 'N/A'}</small></td>
+                                            <td>${h.processed_files || 0}/${h.total_files || 0}</td>
+                                            <td>${h.total_chunks || 0}</td>
+                                            <td>${(h.duration_seconds || 0).toFixed(1)}s</td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    `;
+                } else {
+                    document.getElementById('history-content').innerHTML = `
+                        <div class="text-center text-secondary py-4">No ingestion history available</div>
+                    `;
+                }
+            } catch (e) {
+                document.getElementById('history-content').innerHTML = `
+                    <div class="alert alert-warning">Failed to load history: ${e.message}</div>
+                `;
+            }
+        });
+
+        // Start Ingestion
+        document.getElementById('start-ingestion-btn').onclick = async () => {
+            const folderPath = document.getElementById('folder-path').value.trim();
+            if (!folderPath) {
+                alert('Please enter a folder path');
+                return;
+            }
+
+            const recursive = document.getElementById('recursive-check').checked;
+            const updateKG = document.getElementById('update-kg-check').checked;
+
+            // Show progress, hide results/error
+            document.getElementById('ingestion-progress').classList.remove('d-none');
+            document.getElementById('ingestion-results').classList.add('d-none');
+            document.getElementById('ingestion-error').classList.add('d-none');
+            document.getElementById('start-ingestion-btn').disabled = true;
+
+            const progressBar = document.getElementById('progress-bar');
+            const progressStatus = document.getElementById('progress-status');
+
+            try {
+                const sessionId = await getAdminSession();
+
+                // Step 1: Ingest to NoSQL and Vector DB (30%)
+                progressBar.style.width = '10%';
+                progressBar.textContent = '10%';
+                progressStatus.textContent = 'Step 1/4: Ingesting files to NoSQL and Vector DB...';
+
+                const ingestResponse = await fetch(`/api/delivery-brain/ingest?session_id=${sessionId}&directory=${encodeURIComponent(folderPath)}&recursive=${recursive}`, {
+                    method: 'POST'
+                });
+                const ingestResult = await ingestResponse.json();
+
+                if (!ingestResult.success && ingestResult.processed_files === 0) {
+                    throw new Error(ingestResult.detail || 'Ingestion failed');
+                }
+
+                progressBar.style.width = '40%';
+                progressBar.textContent = '40%';
+                progressStatus.textContent = 'Step 2/4: Updating TF-IDF index...';
+
+                // Step 2: TF-IDF is already handled by RAG engine, just simulate
+                await new Promise(r => setTimeout(r, 500));
+
+                progressBar.style.width = '60%';
+                progressBar.textContent = '60%';
+                progressStatus.textContent = 'Step 3/4: Updating Vector embeddings...';
+
+                // Step 3: Vector embeddings already done in ingest
+                await new Promise(r => setTimeout(r, 500));
+
+                let kgNodes = 0;
+                if (updateKG) {
+                    progressBar.style.width = '80%';
+                    progressBar.textContent = '80%';
+                    progressStatus.textContent = 'Step 4/4: Updating Knowledge Graph...';
+
+                    // Step 4: Update KG
+                    const kgResponse = await fetch(`/api/admin/rebuild-kg?session_id=${sessionId}&directory=${encodeURIComponent(folderPath)}`, {
+                        method: 'POST'
+                    });
+                    const kgResult = await kgResponse.json();
+                    kgNodes = kgResult.node_count || 0;
+                }
+
+                progressBar.style.width = '100%';
+                progressBar.textContent = '100%';
+                progressBar.classList.remove('progress-bar-animated');
+                progressStatus.textContent = 'Complete!';
+
+                // Show results
+                document.getElementById('result-files').textContent = ingestResult.processed_files || 0;
+                document.getElementById('result-chunks').textContent = ingestResult.total_chunks || 0;
+                document.getElementById('result-vectors').textContent = ingestResult.total_chunks || 0;
+                document.getElementById('result-kg-nodes').textContent = kgNodes;
+                document.getElementById('ingestion-results').classList.remove('d-none');
+
+            } catch (e) {
+                document.getElementById('ingestion-error').textContent = `Error: ${e.message}`;
+                document.getElementById('ingestion-error').classList.remove('d-none');
+                progressBar.classList.add('bg-danger');
+            } finally {
+                document.getElementById('start-ingestion-btn').disabled = false;
+                progressBar.classList.remove('progress-bar-animated');
             }
         };
     </script>

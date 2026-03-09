@@ -122,6 +122,8 @@ class ChatEngine:
         """
         Process user message and generate response.
 
+        Strategy: RAG (semantic search) first, fall back to Knowledge Graph if confidence < 0.4
+
         Args:
             user_message: User's natural language query
             allowed_doc_types: List of document types user can access (for RBAC)
@@ -129,6 +131,8 @@ class ChatEngine:
         Returns:
             ChatResponse with answer and metadata
         """
+        RAG_CONFIDENCE_THRESHOLD = 0.4
+
         # Add to context
         self.context.add_message(ChatMessage(
             role="user",
@@ -137,29 +141,44 @@ class ChatEngine:
         ))
 
         try:
-            # Step 1: Create query plan
-            plan = self.query_planner.create_plan(user_message)
-            logger.debug(f"Query plan: {plan.query_type.value}")
-
-            # Step 2: Execute query plan
-            results = self._execute_plan(plan)
-
-            # Step 3: Generate response
-            response = self._generate_response(user_message, plan, results)
-
-            # Step 4: If response is poor and RAG is available, try RAG
-            if self.rag_engine and self._should_use_rag(response):
-                logger.info("Falling back to RAG for better response")
+            # Step 1: Try RAG (semantic search) first - this is now the default
+            if self.rag_engine:
+                logger.info("Using RAG (semantic search) as primary source")
                 rag_response = self._query_rag(user_message, allowed_doc_types)
-                if rag_response and rag_response.confidence > response.confidence:
+
+                if rag_response and rag_response.confidence >= RAG_CONFIDENCE_THRESHOLD:
+                    logger.info(f"RAG confidence {rag_response.confidence:.2f} >= {RAG_CONFIDENCE_THRESHOLD}, using RAG response")
                     response = ChatResponse(
                         answer=rag_response.answer,
                         sources=rag_response.sources,
-                        data={"rag_used": True},
-                        follow_up_questions=self._generate_follow_ups(plan, results),
+                        data={"rag_used": True, "source": "vector_db"},
+                        follow_up_questions=["What else would you like to know?", "Can you tell me more about this?"],
                         confidence=rag_response.confidence,
                         query_type="rag_retrieval"
                     )
+
+                    # Add to context
+                    self.context.add_message(ChatMessage(
+                        role="assistant",
+                        content=response.answer,
+                        timestamp=datetime.now(),
+                        metadata={"sources": response.sources}
+                    ))
+                    return response
+                else:
+                    logger.info(f"RAG confidence {rag_response.confidence if rag_response else 0:.2f} < {RAG_CONFIDENCE_THRESHOLD}, falling back to Knowledge Graph")
+
+            # Step 2: Fall back to Knowledge Graph if RAG confidence is low
+            logger.info("Using Knowledge Graph as source")
+            plan = self.query_planner.create_plan(user_message)
+            logger.debug(f"Query plan: {plan.query_type.value}")
+
+            # Execute query plan
+            results = self._execute_plan(plan)
+
+            # Generate response
+            response = self._generate_response(user_message, plan, results)
+            response.data["source"] = "knowledge_graph"
 
             # Add to context
             self.context.add_message(ChatMessage(
@@ -708,6 +727,11 @@ Guidelines:
             return True
         # Use RAG for very short responses
         if len(response.answer) < 50 and response.confidence < 0.7:
+            return True
+        # Use RAG if data is empty - semantic search may find relevant info
+        if not response.data or (isinstance(response.data, dict) and len(response.data) == 0):
+            return True
+        if "empty" in response.answer.lower() and "data" in response.answer.lower():
             return True
         return False
 

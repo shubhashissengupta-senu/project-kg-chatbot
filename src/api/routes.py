@@ -798,7 +798,8 @@ async def ingest_directory(
     request: Request,
     session_id: str,
     directory: str,
-    recursive: bool = True
+    recursive: bool = True,
+    skip_existing: bool = True
 ):
     """
     Ingest files from a directory.
@@ -807,6 +808,7 @@ async def ingest_directory(
         session_id: User session ID
         directory: Path to directory to ingest
         recursive: Whether to scan subdirectories
+        skip_existing: If True, skip files that already exist in the database (default: True)
 
     Returns:
         Ingestion result summary
@@ -832,7 +834,32 @@ async def ingest_directory(
 
     try:
         pipeline = get_delivery_brain_pipeline()
-        result = pipeline.ingest_directory(directory, recursive=recursive)
+
+        # Get existing file hashes if skip_existing is True
+        existing_hashes = set()
+        if skip_existing:
+            try:
+                existing_docs = pipeline.nosql_store.get_all_documents()
+                existing_hashes = {doc.get('file_hash') for doc in existing_docs if doc.get('file_hash')}
+                logger.info(f"Found {len(existing_hashes)} existing documents to skip")
+            except Exception as e:
+                logger.warning(f"Could not check existing documents: {e}")
+
+        # Create a file filter to skip existing files
+        def file_filter(filepath: str) -> bool:
+            if not skip_existing:
+                return True
+            from ..delivery_brain.models import compute_file_hash
+            try:
+                file_hash = compute_file_hash(filepath)
+                if file_hash in existing_hashes:
+                    logger.debug(f"Skipping existing file: {filepath}")
+                    return False
+                return True
+            except:
+                return True
+
+        result = pipeline.ingest_directory(directory, recursive=recursive, file_filter=file_filter if skip_existing else None)
 
         return {
             "success": result.success,
@@ -1030,3 +1057,273 @@ async def delete_document(
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Delete failed: {str(e)}")
+
+
+# ============================================================================
+# Admin Router - System Administration
+# ============================================================================
+
+admin_router = APIRouter(prefix="/admin", tags=["admin"])
+
+
+@admin_router.post("/rebuild-kg")
+async def rebuild_knowledge_graph(
+    request: Request,
+    session_id: str,
+    directory: str = None
+):
+    """
+    Rebuild the Knowledge Graph from documents.
+
+    This will:
+    1. Re-ingest documents using the standard ingestion pipeline
+    2. Rebuild the knowledge graph with entities and relationships
+    3. Create temporal snapshots
+
+    Args:
+        session_id: User session ID
+        directory: Optional directory to ingest from (uses default if None)
+
+    Returns:
+        Statistics about the rebuilt knowledge graph
+    """
+    state = get_app_state(request)
+    session = state.role_manager.get_session(session_id)
+
+    if not session:
+        raise HTTPException(status_code=401, detail="Invalid session")
+
+    try:
+        from pathlib import Path
+        from ..ingestion.pipeline import create_default_pipeline
+        from ..ingestion.parsers.qa_review_parser import QAReviewParser
+        from ..ingestion.parsers.finance_parser import FinanceReviewParser
+        from ..knowledge_graph.builder import KnowledgeGraphBuilder
+
+        # Determine directory to use
+        if directory:
+            data_dir = Path(directory)
+        else:
+            # Use default paths
+            possible_paths = [
+                Path("../ABC Inc. Simulacra"),
+                Path("./ABC Inc. Simulacra"),
+                Path("C:/Users/shubhashis.sengupta/TestClaude/ABC Inc. Simulacra"),
+            ]
+            data_dir = None
+            for path in possible_paths:
+                if path.exists():
+                    data_dir = path
+                    break
+
+        if not data_dir or not data_dir.exists():
+            raise HTTPException(status_code=400, detail=f"Directory not found: {directory or 'default paths'}")
+
+        # Create ingestion pipeline
+        pipeline = create_default_pipeline()
+        pipeline.add_parser(QAReviewParser())
+        pipeline.add_parser(FinanceReviewParser())
+
+        # Ingest documents
+        documents = pipeline.ingest_directory(data_dir)
+
+        # Build knowledge graph
+        kg_builder = KnowledgeGraphBuilder()
+        if documents:
+            kg_builder.build_from_documents(documents)
+
+        # Update app state with new graph
+        state.kg_builder = kg_builder
+        state.query_engine.graph = kg_builder.get_graph()
+        state.query_engine.snapshots = kg_builder.get_snapshots()
+
+        node_count = kg_builder.graph.graph.number_of_nodes()
+        edge_count = kg_builder.graph.graph.number_of_edges()
+        snapshots = kg_builder.get_snapshots()
+        snapshot_count = len(snapshots.timeline) if hasattr(snapshots, 'timeline') else 0
+
+        return {
+            "success": True,
+            "directory": str(data_dir),
+            "documents_processed": len(documents),
+            "node_count": node_count,
+            "edge_count": edge_count,
+            "snapshot_count": snapshot_count,
+            "message": f"Knowledge Graph rebuilt with {node_count} nodes and {edge_count} edges"
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to rebuild KG: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to rebuild Knowledge Graph: {str(e)}")
+
+
+@admin_router.get("/system-status")
+async def get_system_status(request: Request, session_id: str):
+    """
+    Get overall system status including all data stores.
+
+    Returns status of:
+    - Knowledge Graph
+    - Vector Store (ChromaDB)
+    - NoSQL Store (TinyDB/MongoDB)
+    - RAG Engine
+    - LLM Service
+    """
+    state = get_app_state(request)
+    session = state.role_manager.get_session(session_id)
+
+    if not session:
+        raise HTTPException(status_code=401, detail="Invalid session")
+
+    # Get kg_builder safely
+    kg_builder = getattr(state, 'kg_builder', None)
+    chat_engine = getattr(state, 'chat_engine', None)
+    rag_engine = chat_engine.rag_engine if chat_engine else None
+
+    status = {
+        "knowledge_graph": {
+            "available": kg_builder is not None,
+            "node_count": kg_builder.graph.graph.number_of_nodes() if kg_builder else 0,
+            "edge_count": kg_builder.graph.graph.number_of_edges() if kg_builder else 0,
+        },
+        "rag_engine": {
+            "available": rag_engine is not None,
+            "chunk_count": len(rag_engine.store.get_all_chunks()) if rag_engine else 0,
+        },
+        "chat_engine": {
+            "available": chat_engine is not None,
+            "llm_available": chat_engine.llm.is_available() if chat_engine and chat_engine.llm else False,
+        }
+    }
+
+    # Get Delivery Brain stats if available
+    try:
+        pipeline = get_delivery_brain_pipeline()
+        db_stats = pipeline.get_statistics()
+        status["delivery_brain"] = {
+            "available": True,
+            "nosql_documents": db_stats.get("nosql", {}).get("document_count", 0),
+            "vector_chunks": db_stats.get("vector", {}).get("document_count", 0),
+        }
+    except:
+        status["delivery_brain"] = {"available": False}
+
+    return status
+
+
+@admin_router.post("/full-pipeline-ingest")
+async def full_pipeline_ingest(
+    request: Request,
+    session_id: str,
+    directory: str,
+    recursive: bool = True,
+    update_kg: bool = True,
+    update_rag: bool = True
+):
+    """
+    Run the complete data ingestion pipeline:
+    1. Ingest files to NoSQL DB
+    2. Chunk and index for TF-IDF
+    3. Chunk and vectorize in ChromaDB
+    4. Update Knowledge Graph
+
+    Args:
+        session_id: User session ID
+        directory: Path to directory containing files
+        recursive: Whether to scan subdirectories
+        update_kg: Whether to update Knowledge Graph
+        update_rag: Whether to update RAG/TF-IDF index
+
+    Returns:
+        Complete ingestion results
+    """
+    state = get_app_state(request)
+    session = state.role_manager.get_session(session_id)
+
+    if not session:
+        raise HTTPException(status_code=401, detail="Invalid session")
+
+    from pathlib import Path
+
+    data_dir = Path(directory)
+    if not data_dir.exists():
+        raise HTTPException(status_code=400, detail=f"Directory not found: {directory}")
+
+    results = {
+        "directory": directory,
+        "nosql": {"success": False},
+        "vector": {"success": False},
+        "tfidf": {"success": False},
+        "knowledge_graph": {"success": False},
+    }
+
+    try:
+        # Step 1 & 3: Ingest to NoSQL and Vector DB via Delivery Brain
+        pipeline = get_delivery_brain_pipeline()
+        ingest_result = pipeline.ingest_directory(directory, recursive=recursive)
+
+        results["nosql"] = {
+            "success": True,
+            "files_processed": ingest_result.processed_files,
+            "total_chunks": ingest_result.total_chunks,
+        }
+        results["vector"] = {
+            "success": True,
+            "chunks_indexed": ingest_result.total_chunks,
+        }
+
+        # Step 2: Update TF-IDF in RAG engine
+        if update_rag and state.rag_engine:
+            try:
+                state.rag_engine.initialize(data_dir)
+                results["tfidf"] = {
+                    "success": True,
+                    "chunks_indexed": len(state.rag_engine.store.get_all_chunks()),
+                }
+            except Exception as e:
+                results["tfidf"] = {"success": False, "error": str(e)}
+
+        # Step 4: Update Knowledge Graph
+        if update_kg:
+            try:
+                from ..ingestion.pipeline import create_default_pipeline
+                from ..ingestion.parsers.qa_review_parser import QAReviewParser
+                from ..ingestion.parsers.finance_parser import FinanceReviewParser
+                from ..knowledge_graph.builder import KnowledgeGraphBuilder
+
+                kg_pipeline = create_default_pipeline()
+                kg_pipeline.add_parser(QAReviewParser())
+                kg_pipeline.add_parser(FinanceReviewParser())
+
+                documents = kg_pipeline.ingest_directory(data_dir)
+
+                kg_builder = KnowledgeGraphBuilder()
+                if documents:
+                    kg_builder.build_from_documents(documents)
+
+                # Update app state
+                state.kg_builder = kg_builder
+                state.query_engine.graph = kg_builder.get_graph()
+                state.query_engine.snapshots = kg_builder.get_snapshots()
+
+                results["knowledge_graph"] = {
+                    "success": True,
+                    "documents_processed": len(documents),
+                    "node_count": kg_builder.graph.graph.number_of_nodes(),
+                    "edge_count": kg_builder.graph.graph.number_of_edges(),
+                }
+            except Exception as e:
+                results["knowledge_graph"] = {"success": False, "error": str(e)}
+
+        results["success"] = True
+        results["message"] = "Full pipeline ingestion completed"
+
+        return results
+
+    except Exception as e:
+        logger.error(f"Full pipeline ingestion failed: {e}")
+        results["success"] = False
+        results["error"] = str(e)
+        raise HTTPException(status_code=500, detail=str(e))

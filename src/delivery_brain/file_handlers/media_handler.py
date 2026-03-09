@@ -3,7 +3,7 @@ Media File Handler for Delivery Brain
 
 Handles: Audio (MP3, WAV, M4A, FLAC, OGG) and Video (MP4, AVI, WMV, MOV, MKV)
 License-compliant dependencies:
-- openai-whisper (MIT) for transcription
+- faster-whisper (MIT) or openai-whisper (MIT) for transcription
 - pyannote.audio (MIT) for speaker diarization
 - pydub (MIT) for audio processing
 - moviepy (MIT) for video processing
@@ -51,8 +51,10 @@ class MediaHandler:
         self.max_speakers = max_speakers
 
         self._whisper_available = False
+        self._faster_whisper = False  # True if using faster-whisper
         self._whisper_model = None
         self._pydub_available = False
+        self._av_available = False
         self._moviepy_available = False
         self._pyannote_available = False
         self._diarization_pipeline = None
@@ -61,18 +63,35 @@ class MediaHandler:
 
     def _check_dependencies(self):
         """Check for required dependencies"""
+        # Try faster-whisper first (preferred - more efficient)
         try:
-            import whisper
+            from faster_whisper import WhisperModel
             self._whisper_available = True
-            logger.info("Whisper available for transcription")
+            self._faster_whisper = True
+            logger.info("faster-whisper available for transcription")
         except ImportError:
-            logger.warning("openai-whisper not available - transcription disabled")
+            # Fall back to openai-whisper
+            try:
+                import whisper
+                self._whisper_available = True
+                self._faster_whisper = False
+                logger.info("openai-whisper available for transcription")
+            except ImportError:
+                logger.warning("No whisper library available - transcription disabled")
 
         try:
             import pydub
             self._pydub_available = True
         except ImportError:
             logger.warning("pydub not available - audio conversion limited")
+
+        # Check for av (pyav) - for audio conversion without ffmpeg
+        try:
+            import av
+            self._av_available = True
+        except ImportError:
+            self._av_available = False
+            logger.warning("av not available - audio conversion limited")
 
         try:
             import moviepy.editor
@@ -90,12 +109,22 @@ class MediaHandler:
     def _load_whisper_model(self):
         """Load Whisper model lazily"""
         if self._whisper_model is None and self._whisper_available:
-            import whisper
             logger.info(f"Loading Whisper model: {self.whisper_model_size}")
-            self._whisper_model = whisper.load_model(
-                self.whisper_model_size,
-                device=self.device
-            )
+            if self._faster_whisper:
+                from faster_whisper import WhisperModel
+                # faster-whisper uses compute_type instead of device
+                compute_type = "float16" if self.device == "cuda" else "int8"
+                self._whisper_model = WhisperModel(
+                    self.whisper_model_size,
+                    device=self.device,
+                    compute_type=compute_type
+                )
+            else:
+                import whisper
+                self._whisper_model = whisper.load_model(
+                    self.whisper_model_size,
+                    device=self.device
+                )
         return self._whisper_model
 
     def _load_diarization_pipeline(self):
@@ -127,6 +156,69 @@ class MediaHandler:
 
         return self._diarization_pipeline
 
+    def _convert_audio_to_16khz_mono(self, input_path: str) -> str:
+        """
+        Convert audio to 16kHz mono WAV for efficient Whisper processing.
+        Uses av library for conversion without requiring ffmpeg.
+        """
+        if not self._av_available:
+            return input_path  # Return original if av not available
+
+        import av
+        import numpy as np
+
+        logger.info(f"Converting audio to 16kHz mono: {input_path}")
+
+        # Create temp file for converted audio
+        temp_wav = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
+        temp_wav_path = temp_wav.name
+        temp_wav.close()
+
+        try:
+            # Open input
+            input_container = av.open(input_path)
+            input_stream = input_container.streams.audio[0]
+
+            # Set up resampler to 16kHz mono
+            resampler = av.AudioResampler(
+                format='s16',
+                layout='mono',
+                rate=16000
+            )
+
+            # Open output
+            output_container = av.open(temp_wav_path, 'w')
+            output_stream = output_container.add_stream('pcm_s16le', rate=16000)
+            output_stream.layout = 'mono'
+
+            # Process audio
+            for frame in input_container.decode(audio=0):
+                # Resample
+                resampled_frames = resampler.resample(frame)
+                for resampled_frame in resampled_frames:
+                    # Encode and write
+                    for packet in output_stream.encode(resampled_frame):
+                        output_container.mux(packet)
+
+            # Flush
+            for packet in output_stream.encode(None):
+                output_container.mux(packet)
+
+            input_container.close()
+            output_container.close()
+
+            logger.info(f"Audio converted successfully: {temp_wav_path}")
+            return temp_wav_path
+
+        except Exception as e:
+            logger.error(f"Audio conversion failed: {e}")
+            # Clean up temp file on failure
+            try:
+                os.remove(temp_wav_path)
+            except:
+                pass
+            return input_path  # Fall back to original
+
     def can_handle(self, filepath: str) -> bool:
         """Check if this handler can process the file"""
         ext = Path(filepath).suffix.lower()
@@ -155,6 +247,7 @@ class MediaHandler:
             "media_type": "audio" if self.is_audio(filepath) else "video",
         }
 
+        converted_audio_path = None
         try:
             # Extract audio from video if needed
             if self.is_video(filepath):
@@ -167,8 +260,15 @@ class MediaHandler:
             audio_metadata = self._get_audio_metadata(audio_path)
             metadata.update(audio_metadata)
 
+            # Convert to 16kHz mono for efficient processing
+            if self._av_available:
+                converted_audio_path = self._convert_audio_to_16khz_mono(audio_path)
+                transcribe_path = converted_audio_path
+            else:
+                transcribe_path = audio_path
+
             # Transcribe audio
-            transcription_result = self._transcribe_audio(audio_path)
+            transcription_result = self._transcribe_audio(transcribe_path)
             segments = transcription_result["segments"]
             full_text = transcription_result["text"]
 
@@ -198,10 +298,15 @@ class MediaHandler:
                 # Rebuild full text with speaker labels
                 full_text = self._build_diarized_text(diarized_segments)
 
-            # Clean up temp audio file if extracted from video
+            # Clean up temp audio files
             if self.is_video(filepath) and audio_path != filepath:
                 try:
                     os.remove(audio_path)
+                except:
+                    pass
+            if converted_audio_path and converted_audio_path != audio_path:
+                try:
+                    os.remove(converted_audio_path)
                 except:
                     pass
 
@@ -265,18 +370,195 @@ class MediaHandler:
             raise RuntimeError("Whisper model not available")
 
         logger.info(f"Transcribing audio: {audio_path}")
-        result = model.transcribe(
-            audio_path,
-            word_timestamps=True,
-            verbose=False
-        )
+
+        if self._faster_whisper:
+            # For long audio, process in chunks to avoid memory issues
+            # First check audio duration
+            import av
+            try:
+                container = av.open(audio_path)
+                duration_sec = container.duration / 1000000 if container.duration else 0
+                container.close()
+            except:
+                duration_sec = 0
+
+            # If audio is longer than 5 minutes, process in chunks
+            if duration_sec > 300 and self._av_available:
+                return self._transcribe_audio_chunked(audio_path, model, duration_sec)
+
+            # faster-whisper API for shorter audio
+            segments_gen, info = model.transcribe(
+                audio_path,
+                word_timestamps=True,
+                vad_filter=True
+            )
+            # Convert generator to list and build segments
+            segments = []
+            full_text_parts = []
+            for segment in segments_gen:
+                segments.append({
+                    "start": segment.start,
+                    "end": segment.end,
+                    "text": segment.text,
+                    "confidence": segment.avg_logprob if hasattr(segment, 'avg_logprob') else 1.0
+                })
+                full_text_parts.append(segment.text)
+
+            return {
+                "text": " ".join(full_text_parts),
+                "segments": segments,
+                "language": info.language if hasattr(info, 'language') else "unknown",
+                "duration": segments[-1]["end"] if segments else 0
+            }
+        else:
+            # openai-whisper API
+            result = model.transcribe(
+                audio_path,
+                word_timestamps=True,
+                verbose=False
+            )
+            return {
+                "text": result["text"],
+                "segments": result["segments"],
+                "language": result.get("language"),
+                "duration": result["segments"][-1]["end"] if result["segments"] else 0
+            }
+
+    def _transcribe_audio_chunked(self, audio_path: str, model, total_duration: float) -> Dict[str, Any]:
+        """
+        Transcribe long audio by splitting into smaller chunks.
+        This avoids memory issues with very long audio files.
+        """
+        import av
+        import numpy as np
+
+        logger.info(f"Processing long audio ({total_duration:.0f}s) in chunks...")
+
+        CHUNK_DURATION = 240  # 4 minutes per chunk
+        all_segments = []
+        all_text_parts = []
+        detected_language = None
+
+        # Process audio in chunks
+        chunk_start = 0
+        chunk_idx = 0
+        while chunk_start < total_duration:
+            chunk_end = min(chunk_start + CHUNK_DURATION, total_duration)
+            logger.info(f"Processing chunk {chunk_idx + 1}: {chunk_start:.0f}s - {chunk_end:.0f}s")
+
+            # Extract chunk to temp file
+            chunk_path = self._extract_audio_chunk(audio_path, chunk_start, chunk_end)
+
+            try:
+                # Transcribe chunk
+                segments_gen, info = model.transcribe(
+                    chunk_path,
+                    word_timestamps=True,
+                    vad_filter=True
+                )
+
+                if detected_language is None and hasattr(info, 'language'):
+                    detected_language = info.language
+
+                # Process segments and adjust timestamps
+                for segment in segments_gen:
+                    adjusted_start = segment.start + chunk_start
+                    adjusted_end = segment.end + chunk_start
+                    all_segments.append({
+                        "start": adjusted_start,
+                        "end": adjusted_end,
+                        "text": segment.text,
+                        "confidence": segment.avg_logprob if hasattr(segment, 'avg_logprob') else 1.0
+                    })
+                    all_text_parts.append(segment.text)
+
+            finally:
+                # Clean up chunk temp file
+                try:
+                    os.remove(chunk_path)
+                except:
+                    pass
+
+            chunk_start = chunk_end
+            chunk_idx += 1
 
         return {
-            "text": result["text"],
-            "segments": result["segments"],
-            "language": result.get("language"),
-            "duration": result["segments"][-1]["end"] if result["segments"] else 0
+            "text": " ".join(all_text_parts),
+            "segments": all_segments,
+            "language": detected_language or "unknown",
+            "duration": total_duration
         }
+
+    def _extract_audio_chunk(self, audio_path: str, start_sec: float, end_sec: float) -> str:
+        """Extract a chunk of audio to a temporary file using numpy arrays."""
+        import av
+        import numpy as np
+        import wave
+
+        temp_wav = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
+        temp_wav_path = temp_wav.name
+        temp_wav.close()
+
+        # Open input and collect samples in the time range
+        input_container = av.open(audio_path)
+        input_stream = input_container.streams.audio[0]
+        sample_rate = input_stream.sample_rate
+
+        # Set up resampler to 16kHz mono
+        resampler = av.AudioResampler(
+            format='s16',
+            layout='mono',
+            rate=16000
+        )
+
+        # Collect audio samples
+        all_samples = []
+        current_time = 0.0
+
+        for frame in input_container.decode(audio=0):
+            # Calculate frame time based on samples
+            frame_duration = frame.samples / sample_rate
+            frame_end_time = current_time + frame_duration
+
+            # Skip frames before start
+            if frame_end_time < start_sec:
+                current_time = frame_end_time
+                continue
+
+            # Stop if past end
+            if current_time >= end_sec:
+                break
+
+            # Resample frame
+            resampled_frames = resampler.resample(frame)
+            for resampled_frame in resampled_frames:
+                # Convert to numpy array
+                arr = resampled_frame.to_ndarray()
+                if arr.ndim > 1:
+                    arr = arr.flatten()
+                all_samples.append(arr)
+
+            current_time = frame_end_time
+
+        input_container.close()
+
+        # Combine all samples
+        if all_samples:
+            audio_data = np.concatenate(all_samples)
+            # Ensure int16 format
+            if audio_data.dtype != np.int16:
+                audio_data = (audio_data * 32767).astype(np.int16)
+        else:
+            audio_data = np.array([], dtype=np.int16)
+
+        # Write WAV file
+        with wave.open(temp_wav_path, 'wb') as wav_file:
+            wav_file.setnchannels(1)
+            wav_file.setsampwidth(2)  # 16-bit
+            wav_file.setframerate(16000)
+            wav_file.writeframes(audio_data.tobytes())
+
+        return temp_wav_path
 
     def _perform_diarization(self,
                              audio_path: str,
