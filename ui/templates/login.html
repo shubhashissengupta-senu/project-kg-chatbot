@@ -663,30 +663,75 @@
         async function loadStats() {
             try {
                 const sessionId = await getAdminSession();
-                const response = await fetch(`/api/delivery-brain/statistics?session_id=${sessionId}`);
-                const stats = await response.json();
+
+                // Get both delivery-brain stats and system status
+                const [dbResponse, sysResponse] = await Promise.all([
+                    fetch(`/api/delivery-brain/statistics?session_id=${sessionId}`),
+                    fetch(`/api/admin/system-status?session_id=${sessionId}`)
+                ]);
+
+                const stats = await dbResponse.json();
+                const sysStatus = await sysResponse.json();
+
+                // Extract all metrics
+                const fileCount = stats.nosql?.document_count || 0;
+                const kgNodes = sysStatus.knowledge_graph?.node_count || 0;
+                const kgEdges = sysStatus.knowledge_graph?.edge_count || 0;
+                const vectorChunks = stats.vector?.total_chunks || stats.vector?.document_count || 0;
+                const tfidfChunks = sysStatus.rag_engine?.chunk_count || stats.nosql?.total_chunks || 0;
 
                 document.getElementById('statsContent').innerHTML = `
-                    <div class="stats-grid">
+                    <div class="stats-grid" style="grid-template-columns: repeat(2, 1fr);">
                         <div class="stat-card">
-                            <div class="stat-value">${stats.nosql?.document_count || 0}</div>
-                            <div class="stat-label">Documents in NoSQL</div>
+                            <div class="stat-value">${fileCount}</div>
+                            <div class="stat-label">📄 Total Files</div>
                         </div>
                         <div class="stat-card">
-                            <div class="stat-value">${stats.vector?.total_chunks || 0}</div>
-                            <div class="stat-label">Vectors in ChromaDB</div>
+                            <div class="stat-value">${kgNodes}</div>
+                            <div class="stat-label">🔗 KG Nodes</div>
                         </div>
                         <div class="stat-card">
-                            <div class="stat-value">${stats.nosql?.total_chunks || 0}</div>
-                            <div class="stat-label">Total Chunks</div>
+                            <div class="stat-value">${vectorChunks}</div>
+                            <div class="stat-label">🧮 VectorDB Chunks</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value">${tfidfChunks}</div>
+                            <div class="stat-label">📊 TF-IDF Chunks</div>
                         </div>
                     </div>
-                    <div style="margin-top: 20px;">
-                        <h4 style="font-size: 14px; margin-bottom: 10px;">File Types Processed</h4>
+
+                    <div style="margin-top: 20px; background: rgba(255,255,255,0.05); border-radius: 8px; padding: 15px;">
+                        <h4 style="font-size: 14px; margin-bottom: 12px;">Knowledge Graph Details</h4>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 13px;">
+                            <div>Nodes: <strong style="color: #667eea;">${kgNodes}</strong></div>
+                            <div>Edges: <strong style="color: #667eea;">${kgEdges}</strong></div>
+                        </div>
+                    </div>
+
+                    <div style="margin-top: 15px; background: rgba(255,255,255,0.05); border-radius: 8px; padding: 15px;">
+                        <h4 style="font-size: 14px; margin-bottom: 12px;">File Types Processed</h4>
                         <div style="display: flex; flex-wrap: wrap; gap: 8px;">
                             ${Object.entries(stats.nosql?.file_types || {}).map(([type, count]) =>
                                 `<span style="background: rgba(102,126,234,0.2); padding: 4px 10px; border-radius: 12px; font-size: 12px;">${type}: ${count}</span>`
-                            ).join('')}
+                            ).join('') || '<span style="color: #888;">No files processed yet</span>'}
+                        </div>
+                    </div>
+
+                    <div style="margin-top: 15px; background: rgba(255,255,255,0.05); border-radius: 8px; padding: 15px;">
+                        <h4 style="font-size: 14px; margin-bottom: 12px;">System Services</h4>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 13px;">
+                            <div>LLM Service: ${sysStatus.chat_engine?.llm_available ?
+                                '<span style="color: #00c864;">● Active</span>' :
+                                '<span style="color: #ff6b6b;">● Inactive</span>'}</div>
+                            <div>RAG Engine: ${sysStatus.rag_engine?.available ?
+                                '<span style="color: #00c864;">● Active</span>' :
+                                '<span style="color: #ff6b6b;">● Inactive</span>'}</div>
+                            <div>Knowledge Graph: ${sysStatus.knowledge_graph?.available ?
+                                '<span style="color: #00c864;">● Active</span>' :
+                                '<span style="color: #ff6b6b;">● Inactive</span>'}</div>
+                            <div>Delivery Brain: ${sysStatus.delivery_brain?.available ?
+                                '<span style="color: #00c864;">● Active</span>' :
+                                '<span style="color: #ff6b6b;">● Inactive</span>'}</div>
                         </div>
                     </div>
                 `;
