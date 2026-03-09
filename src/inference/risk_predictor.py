@@ -181,6 +181,41 @@ class RiskPredictor:
         # Sort by probability (highest first)
         predictions.sort(key=lambda p: p.probability, reverse=True)
 
+        # If no predictions, include actual open risks from KG as informational
+        if not predictions:
+            kg_risks = self._get_actual_risks(timestamp)
+            predictions.extend(kg_risks)
+
+        return predictions
+
+    def _get_actual_risks(self, timestamp: datetime) -> List[RiskPrediction]:
+        """Get actual open risks from knowledge graph as informational predictions"""
+        predictions = []
+        state = self.query_engine.get_project_state_at(timestamp)
+
+        if not state or "error" in state:
+            return predictions
+
+        for risk in state.get("open_risks", []):
+            # Map probability string to numeric value
+            prob_map = {"High": 0.75, "Medium": 0.5, "Low": 0.25}
+            probability = prob_map.get(risk.get("probability", "Medium"), 0.5)
+
+            # Map impact to severity
+            severity = risk.get("impact", "Medium")
+
+            predictions.append(RiskPrediction(
+                risk_id=risk.get("id", f"RISK_{timestamp.strftime('%Y%m%d')}"),
+                risk_type="documented_risk",
+                description=risk.get("description", "Unknown risk"),
+                probability=probability,
+                confidence=0.9,  # High confidence since it's documented
+                severity=severity,
+                contributing_factors=[f"Status: {risk.get('status', 'Open')}"],
+                recommended_actions=["Review risk register", "Update mitigation plan"],
+                timeline_days=14
+            ))
+
         return predictions
 
     def _gather_current_metrics(self, timestamp: datetime) -> Dict[str, float]:

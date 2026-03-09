@@ -304,9 +304,14 @@ class ChatEngine:
 
         elif plan.query_type == QueryType.RELATIONSHIP:
             for entity in plan.entities:
-                entity_id = f"{entity.entity_type.upper()}_{entity.value.upper().replace(' ', '_')}"
-                related = self.query_engine.get_related_entities(entity_id)
-                results["data"][entity.value] = related
+                # Handle "list all" queries
+                if entity.value == "_ALL_":
+                    all_entities = self.query_engine.graph.get_nodes_by_type(entity.entity_type)
+                    results["data"][f"all_{entity.entity_type.lower()}s"] = all_entities
+                else:
+                    entity_id = f"{entity.entity_type.upper()}_{entity.value.upper().replace(' ', '_')}"
+                    related = self.query_engine.get_related_entities(entity_id)
+                    results["data"][entity.value] = related
 
         elif plan.query_type == QueryType.AGGREGATION:
             for entity in plan.entities:

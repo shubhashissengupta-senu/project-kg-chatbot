@@ -86,7 +86,9 @@ class IntentClassifier:
         QueryType.RELATIONSHIP: [
             r"who worked on", r"assigned to", r"responsible for",
             r"related to", r"connected to", r"involved in", r"owned by",
-            r"who is on the team", r"team members", r"who are the", r"who left"
+            r"who is on the team", r"team members", r"who are the", r"who left",
+            r"list all", r"show all", r"all persons", r"all team", r"all members",
+            r"everyone on", r"all risks", r"all tasks", r"all defects"
         ],
         QueryType.AGGREGATION: [
             r"how many", r"total", r"count", r"sum of",
@@ -198,6 +200,21 @@ class EntityExtractor:
                 entities.append(ExtractedEntity(
                     entity_type="Metric",
                     value=metric
+                ))
+
+        # Extract entity type requests (for "list all X" queries)
+        entity_type_patterns = {
+            r"all\s+persons?|all\s+people|all\s+team\s+members?|everyone": ("Person", "_ALL_"),
+            r"all\s+risks?": ("Risk", "_ALL_"),
+            r"all\s+tasks?": ("Task", "_ALL_"),
+            r"all\s+defects?": ("Defect", "_ALL_"),
+            r"all\s+change\s*requests?|all\s+crs?": ("ChangeRequest", "_ALL_"),
+        }
+        for pattern, (entity_type, value) in entity_type_patterns.items():
+            if re.search(pattern, query_lower):
+                entities.append(ExtractedEntity(
+                    entity_type=entity_type,
+                    value=value
                 ))
 
         return entities
