@@ -654,3 +654,120 @@ async def get_risk_predictions(request: Request, session_id: str):
             for p in predictions
         ]
     }
+
+
+# ============================================================================
+# Sentiment Analysis Endpoints
+# ============================================================================
+
+@metrics_router.get("/sentiment")
+async def get_sentiment_analysis(request: Request, session_id: str):
+    """Get client and QA sentiment analysis data"""
+    state = get_app_state(request)
+    session = state.role_manager.get_session(session_id)
+
+    if not session:
+        raise HTTPException(status_code=401, detail="Invalid session")
+
+    # Get meeting entities from knowledge graph
+    graph = state.kg_builder.get_graph()
+    meetings = graph.get_nodes_by_type("Meeting")
+
+    client_sentiment = []
+    qa_sentiment = []
+
+    for meeting in meetings:
+        meeting_type = meeting.get("meeting_type", "")
+        sentiment = meeting.get("client_sentiment") or meeting.get("sentiment", "Neutral")
+        date = meeting.get("date")
+        meeting_num = meeting.get("meeting_number", 0)
+
+        sentiment_data = {
+            "date": date.isoformat() if hasattr(date, 'isoformat') else str(date) if date else None,
+            "meeting_number": meeting_num,
+            "sentiment": sentiment,
+            "score": _sentiment_to_score(sentiment),
+            "stream1_rating": meeting.get("stream1_rating"),
+            "stream2_rating": meeting.get("stream2_rating"),
+            "overall_rating": meeting.get("overall_rating"),
+        }
+
+        if meeting_type == "ClientReview":
+            client_sentiment.append(sentiment_data)
+        elif meeting_type == "QAReview":
+            qa_sentiment.append(sentiment_data)
+
+    # Sort by meeting number
+    client_sentiment.sort(key=lambda x: x.get("meeting_number") or 0)
+    qa_sentiment.sort(key=lambda x: x.get("meeting_number") or 0)
+
+    # Calculate current sentiment summary
+    latest_client = client_sentiment[-1] if client_sentiment else None
+    latest_qa = qa_sentiment[-1] if qa_sentiment else None
+
+    return {
+        "client_sentiment": {
+            "history": client_sentiment,
+            "current": latest_client,
+            "trend": _calculate_sentiment_trend(client_sentiment),
+        },
+        "qa_sentiment": {
+            "history": qa_sentiment,
+            "current": latest_qa,
+            "trend": _calculate_sentiment_trend(qa_sentiment),
+        },
+        "summary": {
+            "client_status": latest_client.get("sentiment") if latest_client else "Unknown",
+            "qa_status": latest_qa.get("sentiment") if latest_qa else "Unknown",
+            "overall_health": _calculate_overall_health(latest_client, latest_qa),
+        }
+    }
+
+
+def _sentiment_to_score(sentiment: str) -> int:
+    """Convert sentiment label to numeric score"""
+    scores = {
+        "Positive": 5,
+        "CautiouslyPositive": 4,
+        "Neutral": 3,
+        "Concerned": 2,
+        "Negative": 1,
+    }
+    return scores.get(sentiment, 3)
+
+
+def _calculate_sentiment_trend(history: list) -> str:
+    """Calculate sentiment trend from history"""
+    if len(history) < 2:
+        return "Stable"
+
+    recent_scores = [h.get("score", 3) for h in history[-3:]]
+    if len(recent_scores) < 2:
+        return "Stable"
+
+    diff = recent_scores[-1] - recent_scores[0]
+    if diff > 0:
+        return "Improving"
+    elif diff < 0:
+        return "Declining"
+    return "Stable"
+
+
+def _calculate_overall_health(client: dict, qa: dict) -> str:
+    """Calculate overall project health from sentiment"""
+    if not client and not qa:
+        return "Unknown"
+
+    scores = []
+    if client:
+        scores.append(client.get("score", 3))
+    if qa:
+        scores.append(qa.get("score", 3))
+
+    avg = sum(scores) / len(scores)
+    if avg >= 4:
+        return "Healthy"
+    elif avg >= 3:
+        return "Cautious"
+    else:
+        return "At Risk"

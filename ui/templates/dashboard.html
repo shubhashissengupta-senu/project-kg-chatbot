@@ -332,6 +332,34 @@
             </div>
         </div>
 
+        <div class="chart-card" id="sentimentSection">
+            <h3>Stakeholder Sentiment Analysis</h3>
+            <div class="grid" style="margin-top:16px;">
+                <div class="card" style="background:rgba(102,126,234,0.1);border:1px solid rgba(102,126,234,0.3);">
+                    <h3>Client Sentiment</h3>
+                    <div class="value" id="clientSentimentValue">Loading...</div>
+                    <div class="change" id="clientSentimentTrend"></div>
+                    <div style="margin-top:12px;font-size:13px;color:#888;">
+                        <span id="clientStream1">Stream 1: -</span> | <span id="clientStream2">Stream 2: -</span>
+                    </div>
+                </div>
+                <div class="card" style="background:rgba(78,205,196,0.1);border:1px solid rgba(78,205,196,0.3);">
+                    <h3>QA Confidence</h3>
+                    <div class="value" id="qaSentimentValue">Loading...</div>
+                    <div class="change" id="qaSentimentTrend"></div>
+                    <div style="margin-top:12px;font-size:13px;color:#888;">
+                        <span id="qaOverall">Overall: -</span>
+                    </div>
+                </div>
+                <div class="card" style="background:rgba(254,202,87,0.1);border:1px solid rgba(254,202,87,0.3);">
+                    <h3>Overall Health</h3>
+                    <div class="value" id="overallHealthValue">Loading...</div>
+                    <div class="change" id="overallHealthDesc"></div>
+                </div>
+            </div>
+            <div id="sentimentChart" style="margin-top:20px;"></div>
+        </div>
+
         <div class="chart-card">
             <h3>Upcoming Milestones <span style="font-size:12px;color:#888;font-weight:normal;">(hover for details)</span></h3>
 
@@ -625,6 +653,120 @@
             xaxis: {gridcolor: 'rgba(255,255,255,0.1)'},
             yaxis: {gridcolor: 'rgba(255,255,255,0.1)', title: 'Quality %', range: [70, 100]}
         }, {responsive: true});
+
+        // Load Sentiment Analysis
+        async function loadSentimentData() {
+            try {
+                const response = await fetch(`/api/metrics/sentiment?session_id=${sessionId}`);
+                if (!response.ok) throw new Error('Failed to load sentiment');
+                const data = await response.json();
+
+                // Update Client Sentiment
+                const clientData = data.client_sentiment;
+                if (clientData && clientData.current) {
+                    const sentiment = clientData.current.sentiment || 'Neutral';
+                    document.getElementById('clientSentimentValue').innerHTML = getSentimentBadge(sentiment);
+                    document.getElementById('clientSentimentTrend').innerHTML = getTrendIndicator(clientData.trend);
+                    document.getElementById('clientStream1').textContent = `Stream 1: ${clientData.current.stream1_rating || '-'}/10`;
+                    document.getElementById('clientStream2').textContent = `Stream 2: ${clientData.current.stream2_rating || '-'}/10`;
+                }
+
+                // Update QA Sentiment
+                const qaData = data.qa_sentiment;
+                if (qaData && qaData.current) {
+                    const sentiment = qaData.current.sentiment || 'Neutral';
+                    document.getElementById('qaSentimentValue').innerHTML = getSentimentBadge(sentiment);
+                    document.getElementById('qaSentimentTrend').innerHTML = getTrendIndicator(qaData.trend);
+                    document.getElementById('qaOverall').textContent = `Overall: ${qaData.current.overall_rating || '-'}/10`;
+                }
+
+                // Update Overall Health
+                const summary = data.summary;
+                if (summary) {
+                    document.getElementById('overallHealthValue').innerHTML = getHealthBadge(summary.overall_health);
+                    document.getElementById('overallHealthDesc').textContent = `Client: ${summary.client_status} | QA: ${summary.qa_status}`;
+                }
+
+                // Draw Sentiment Chart
+                drawSentimentChart(clientData, qaData);
+
+            } catch (error) {
+                console.error('Error loading sentiment:', error);
+                document.getElementById('clientSentimentValue').textContent = 'N/A';
+                document.getElementById('qaSentimentValue').textContent = 'N/A';
+                document.getElementById('overallHealthValue').textContent = 'N/A';
+            }
+        }
+
+        function getSentimentBadge(sentiment) {
+            const colors = {
+                'Positive': 'status-green',
+                'CautiouslyPositive': 'status-green',
+                'Neutral': 'status-amber',
+                'Concerned': 'status-amber',
+                'Negative': 'status-red'
+            };
+            const icons = {
+                'Positive': '😊',
+                'CautiouslyPositive': '🙂',
+                'Neutral': '😐',
+                'Concerned': '😟',
+                'Negative': '😞'
+            };
+            return `<span class="status-badge ${colors[sentiment] || 'status-amber'}">${icons[sentiment] || ''} ${sentiment}</span>`;
+        }
+
+        function getTrendIndicator(trend) {
+            if (trend === 'Improving') return '<span class="positive">↑ Improving</span>';
+            if (trend === 'Declining') return '<span class="negative">↓ Declining</span>';
+            return '<span style="color:#888">→ Stable</span>';
+        }
+
+        function getHealthBadge(health) {
+            const colors = { 'Healthy': 'status-green', 'Cautious': 'status-amber', 'At Risk': 'status-red' };
+            const icons = { 'Healthy': '✓', 'Cautious': '⚠', 'At Risk': '✗' };
+            return `<span class="status-badge ${colors[health] || 'status-amber'}">${icons[health] || ''} ${health}</span>`;
+        }
+
+        function drawSentimentChart(clientData, qaData) {
+            const clientHistory = clientData?.history || [];
+            const qaHistory = qaData?.history || [];
+
+            const clientX = clientHistory.map(h => `Meeting ${h.meeting_number}`);
+            const clientY = clientHistory.map(h => h.score);
+            const qaX = qaHistory.map(h => `Meeting ${h.meeting_number}`);
+            const qaY = qaHistory.map(h => h.score);
+
+            const traces = [];
+            if (clientY.length > 0) {
+                traces.push({
+                    x: clientX, y: clientY, name: 'Client Sentiment',
+                    type: 'scatter', mode: 'lines+markers',
+                    line: {color: '#667eea', width: 3}, marker: {size: 10}
+                });
+            }
+            if (qaY.length > 0) {
+                traces.push({
+                    x: qaX, y: qaY, name: 'QA Confidence',
+                    type: 'scatter', mode: 'lines+markers',
+                    line: {color: '#4ecdc4', width: 3}, marker: {size: 10}
+                });
+            }
+
+            if (traces.length > 0) {
+                Plotly.newPlot('sentimentChart', traces, {
+                    paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
+                    font: {color: '#fff'}, margin: {t: 30, r: 20, b: 40, l: 50},
+                    xaxis: {gridcolor: 'rgba(255,255,255,0.1)'},
+                    yaxis: {gridcolor: 'rgba(255,255,255,0.1)', title: 'Sentiment Score', range: [0, 6],
+                        tickvals: [1, 2, 3, 4, 5], ticktext: ['Negative', 'Concerned', 'Neutral', 'Cautious+', 'Positive']},
+                    legend: {x: 0, y: 1.1, orientation: 'h'}
+                }, {responsive: true});
+            }
+        }
+
+        // Load sentiment data on page load
+        loadSentimentData();
     </script>
 </body>
 </html>
