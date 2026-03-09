@@ -771,3 +771,258 @@ def _calculate_overall_health(client: dict, qa: dict) -> str:
         return "Cautious"
     else:
         return "At Risk"
+
+
+# ============================================================================
+# Delivery Brain Data Ingestion Endpoints
+# ============================================================================
+
+delivery_brain_router = APIRouter(prefix="/delivery-brain", tags=["delivery-brain"])
+
+# Store pipeline instance at module level for reuse
+_delivery_brain_pipeline = None
+
+
+def get_delivery_brain_pipeline():
+    """Get or create Delivery Brain pipeline instance"""
+    global _delivery_brain_pipeline
+    if _delivery_brain_pipeline is None:
+        from ..delivery_brain import DeliveryBrainPipeline, IngestionConfig
+        config = IngestionConfig.from_env()
+        _delivery_brain_pipeline = DeliveryBrainPipeline(config)
+    return _delivery_brain_pipeline
+
+
+@delivery_brain_router.post("/ingest")
+async def ingest_directory(
+    request: Request,
+    session_id: str,
+    directory: str,
+    recursive: bool = True
+):
+    """
+    Ingest files from a directory.
+
+    Args:
+        session_id: User session ID
+        directory: Path to directory to ingest
+        recursive: Whether to scan subdirectories
+
+    Returns:
+        Ingestion result summary
+    """
+    state = get_app_state(request)
+    session = state.role_manager.get_session(session_id)
+
+    if not session:
+        raise HTTPException(status_code=401, detail="Invalid session")
+
+    # Check permission (only admins can ingest)
+    from ..auth.roles import Permission
+    if Permission.VIEW_ALL not in session.user.role.permissions:
+        raise HTTPException(status_code=403, detail="Admin permission required for data ingestion")
+
+    # Validate directory
+    from pathlib import Path
+    dir_path = Path(directory)
+    if not dir_path.exists():
+        raise HTTPException(status_code=400, detail=f"Directory not found: {directory}")
+    if not dir_path.is_dir():
+        raise HTTPException(status_code=400, detail=f"Path is not a directory: {directory}")
+
+    try:
+        pipeline = get_delivery_brain_pipeline()
+        result = pipeline.ingest_directory(directory, recursive=recursive)
+
+        return {
+            "success": result.success,
+            "total_files": result.total_files,
+            "processed_files": result.processed_files,
+            "failed_files": result.failed_files,
+            "skipped_files": result.skipped_files,
+            "total_chunks": result.total_chunks,
+            "duration_seconds": result.duration_seconds,
+            "errors": result.errors[:10],  # Limit errors in response
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Ingestion failed: {str(e)}")
+
+
+@delivery_brain_router.post("/ingest-file")
+async def ingest_single_file(
+    request: Request,
+    session_id: str,
+    file_path: str
+):
+    """
+    Ingest a single file.
+
+    Args:
+        session_id: User session ID
+        file_path: Path to file to ingest
+
+    Returns:
+        Document information
+    """
+    state = get_app_state(request)
+    session = state.role_manager.get_session(session_id)
+
+    if not session:
+        raise HTTPException(status_code=401, detail="Invalid session")
+
+    from ..auth.roles import Permission
+    if Permission.VIEW_ALL not in session.user.role.permissions:
+        raise HTTPException(status_code=403, detail="Admin permission required")
+
+    from pathlib import Path
+    if not Path(file_path).exists():
+        raise HTTPException(status_code=400, detail=f"File not found: {file_path}")
+
+    try:
+        pipeline = get_delivery_brain_pipeline()
+        document = pipeline.ingest_file(file_path)
+
+        if document:
+            return {
+                "success": True,
+                "document_id": document.document_id,
+                "file_name": document.metadata.file_name,
+                "file_type": document.metadata.file_type.value,
+                "chunk_count": len(document.chunks),
+                "processing_time": document.processing_time_seconds,
+            }
+        else:
+            raise HTTPException(status_code=400, detail="Failed to ingest file")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Ingestion failed: {str(e)}")
+
+
+@delivery_brain_router.get("/search")
+async def search_documents(
+    request: Request,
+    session_id: str,
+    query: str,
+    n_results: int = 10
+):
+    """
+    Search ingested documents.
+
+    Args:
+        session_id: User session ID
+        query: Search query
+        n_results: Number of results to return
+
+    Returns:
+        Search results
+    """
+    state = get_app_state(request)
+    session = state.role_manager.get_session(session_id)
+
+    if not session:
+        raise HTTPException(status_code=401, detail="Invalid session")
+
+    try:
+        pipeline = get_delivery_brain_pipeline()
+        results = pipeline.search(query, n_results)
+
+        return {
+            "query": query,
+            "results": [
+                {
+                    "id": r["id"],
+                    "content": r["document"][:500] if r["document"] else None,
+                    "distance": r["distance"],
+                    "metadata": r["metadata"],
+                }
+                for r in results
+            ],
+            "total_results": len(results),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Search failed: {str(e)}")
+
+
+@delivery_brain_router.get("/statistics")
+async def get_ingestion_statistics(request: Request, session_id: str):
+    """Get Delivery Brain storage statistics"""
+    state = get_app_state(request)
+    session = state.role_manager.get_session(session_id)
+
+    if not session:
+        raise HTTPException(status_code=401, detail="Invalid session")
+
+    try:
+        pipeline = get_delivery_brain_pipeline()
+        stats = pipeline.get_statistics()
+        return stats
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get statistics: {str(e)}")
+
+
+@delivery_brain_router.get("/history")
+async def get_ingestion_history(
+    request: Request,
+    session_id: str,
+    limit: int = 10
+):
+    """Get recent ingestion history"""
+    state = get_app_state(request)
+    session = state.role_manager.get_session(session_id)
+
+    if not session:
+        raise HTTPException(status_code=401, detail="Invalid session")
+
+    try:
+        pipeline = get_delivery_brain_pipeline()
+        history = pipeline.nosql_store.get_ingestion_history(limit)
+        return {"history": history}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get history: {str(e)}")
+
+
+@delivery_brain_router.get("/supported-formats")
+async def get_supported_formats():
+    """Get list of supported file formats"""
+    from ..delivery_brain.config import IngestionConfig
+    config = IngestionConfig()
+
+    return {
+        "text_formats": config.get_supported_text_extensions(),
+        "document_formats": config.get_supported_document_extensions(),
+        "audio_formats": config.get_supported_audio_extensions(),
+        "video_formats": config.get_supported_video_extensions(),
+        "all_formats": config.supported_extensions,
+    }
+
+
+@delivery_brain_router.delete("/document/{document_id}")
+async def delete_document(
+    request: Request,
+    session_id: str,
+    document_id: str
+):
+    """Delete a document and its chunks"""
+    state = get_app_state(request)
+    session = state.role_manager.get_session(session_id)
+
+    if not session:
+        raise HTTPException(status_code=401, detail="Invalid session")
+
+    from ..auth.roles import Permission
+    if Permission.VIEW_ALL not in session.user.role.permissions:
+        raise HTTPException(status_code=403, detail="Admin permission required")
+
+    try:
+        pipeline = get_delivery_brain_pipeline()
+
+        # Delete from both stores
+        nosql_deleted = pipeline.nosql_store.delete_document(document_id)
+        vector_deleted = pipeline.vector_store.delete_by_document_id(document_id)
+
+        return {
+            "success": nosql_deleted,
+            "document_id": document_id,
+            "chunks_deleted": vector_deleted,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Delete failed: {str(e)}")

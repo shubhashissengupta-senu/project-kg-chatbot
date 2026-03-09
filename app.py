@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 # Import routes
 from src.api.routes import (
     auth_router, chat_router, graph_router,
-    metrics_router, simulation_router
+    metrics_router, simulation_router, delivery_brain_router
 )
 
 
@@ -179,6 +179,7 @@ app.include_router(chat_router)
 app.include_router(graph_router)
 app.include_router(metrics_router)
 app.include_router(simulation_router)
+app.include_router(delivery_brain_router, prefix="/api")
 
 
 # ============================================================================
