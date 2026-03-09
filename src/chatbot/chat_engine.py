@@ -157,6 +157,185 @@ class ChatEngine:
         # Default fallback - last known document date
         return datetime(2026, 2, 23)
 
+    def _get_kg_person_summary(self) -> str:
+        """Get summary of all persons from Knowledge Graph with their status and timestamps.
+        Checks across all temporal snapshots to find departure/joining events."""
+        try:
+            # Get all person nodes from KG
+            persons = self.query_engine.graph.get_nodes_by_type("Person")
+            if not persons:
+                return ""
+
+            active = []
+            departed = []
+            joined_recently = []
+
+            # Also check all temporal snapshots for person status changes
+            snapshots = self.query_engine.snapshots
+            person_history = {}
+
+            if hasattr(snapshots, 'timeline') and snapshots.timeline:
+                for ts in snapshots.timeline:
+                    try:
+                        snapshot = snapshots.get_snapshot(ts)
+                        if snapshot:
+                            for node_id, node_data in snapshot.items():
+                                if 'PERSON_' in node_id or node_data.get('entity_type') == 'Person':
+                                    name = node_data.get('name', node_id.replace('PERSON_', '').replace('_', ' ').title())
+                                    if name not in person_history:
+                                        person_history[name] = {'statuses': [], 'timestamps': [], 'roles': set()}
+                                    status = node_data.get('status', '')
+                                    if status:
+                                        person_history[name]['statuses'].append(status)
+                                        person_history[name]['timestamps'].append(ts)
+                                    role = node_data.get('role', '')
+                                    if role:
+                                        person_history[name]['roles'].add(role)
+                    except Exception:
+                        continue
+
+            for person in persons:
+                name = person.get('name', 'Unknown')
+                status = person.get('status', '')
+                first_seen = person.get('first_seen', '')
+                last_seen = person.get('last_seen', '')
+                role = person.get('role', '')
+
+                # Check history for departure signals
+                history = person_history.get(name, {})
+                all_statuses = ' '.join(history.get('statuses', []) + [status]).lower()
+
+                # Categorize by status - check both current and historical statuses
+                is_departed = ('final' in all_statuses or 'depart' in all_statuses or
+                               'left' in all_statuses or 'last week' in all_statuses or
+                               'leaving' in all_statuses or 'resignation' in all_statuses)
+
+                is_new_joiner = ('new' in all_statuses or 'joined' in all_statuses or
+                                 'onboard' in all_statuses or 'joining' in all_statuses or
+                                 'replacement' in all_statuses or 'hired' in all_statuses)
+
+                if is_departed:
+                    departed.append(f"- **{name}** ({role}): {status or 'Departed'}, last seen {last_seen[:10] if last_seen else 'N/A'}")
+                elif is_new_joiner or (first_seen and first_seen > '2026-01-15'):  # Joined after mid-January
+                    join_date = first_seen[:10] if first_seen else 'N/A'
+                    joined_recently.append(f"- **{name}** ({role}): {status or 'New joiner'}, joined {join_date}")
+                else:
+                    active.append(f"- **{name}** ({role}): {status or 'Active'}")
+
+            summary_parts = []
+            if departed:
+                summary_parts.append("**Team Members Who Left:**\n" + "\n".join(departed))
+            if joined_recently:
+                summary_parts.append("**Recently Joined:**\n" + "\n".join(joined_recently))
+            if active:
+                summary_parts.append("**Current Active Members:**\n" + "\n".join(active))
+
+            return "\n\n".join(summary_parts)
+        except Exception as e:
+            logger.warning(f"Could not get KG person summary: {e}")
+            return ""
+
+    def _get_kg_role_summary(self) -> str:
+        """Get roles and responsibilities from Knowledge Graph."""
+        try:
+            # Get all person nodes with their roles
+            persons = self.query_engine.graph.get_nodes_by_type("Person")
+            if not persons:
+                return ""
+
+            role_data = []
+            for person in persons:
+                name = person.get('name', 'Unknown')
+                role = person.get('role', '')
+                responsibilities = person.get('responsibilities', '')
+                stream = person.get('stream', '')
+
+                if role or responsibilities:
+                    parts = [f"- **{name}**"]
+                    if role:
+                        parts.append(f"Role: {role}")
+                    if stream:
+                        parts.append(f"Stream: {stream}")
+                    if responsibilities:
+                        parts.append(f"Responsibilities: {responsibilities}")
+                    role_data.append(" | ".join(parts))
+
+            if role_data:
+                return "**Team Roles and Responsibilities:**\n" + "\n".join(role_data)
+            return ""
+        except Exception as e:
+            logger.warning(f"Could not get KG role summary: {e}")
+            return ""
+
+    def _get_kg_temporal_summary(self, query: str) -> str:
+        """Get temporal data from KG snapshots based on query context.
+        Useful for timestamp-based queries when RAG confidence is low."""
+        try:
+            snapshots = self.query_engine.snapshots
+            if not hasattr(snapshots, 'timeline') or not snapshots.timeline:
+                return ""
+
+            # Extract month/time hints from query
+            query_lower = query.lower()
+            relevant_snapshots = []
+
+            for ts in sorted(snapshots.timeline):
+                try:
+                    month_name = ts.strftime("%B").lower() if hasattr(ts, 'strftime') else ""
+                    year = str(ts.year) if hasattr(ts, 'year') else ""
+
+                    # Check if this timestamp matches query context
+                    is_relevant = (
+                        month_name in query_lower or
+                        year in query_lower or
+                        'all' in query_lower or
+                        'timeline' in query_lower or
+                        'history' in query_lower
+                    )
+
+                    if is_relevant:
+                        snapshot = snapshots.get_snapshot(ts)
+                        if snapshot:
+                            relevant_snapshots.append((ts, snapshot))
+                except Exception:
+                    continue
+
+            if not relevant_snapshots:
+                # If no specific match, get last 3 snapshots
+                for ts in sorted(snapshots.timeline)[-3:]:
+                    try:
+                        snapshot = snapshots.get_snapshot(ts)
+                        if snapshot:
+                            relevant_snapshots.append((ts, snapshot))
+                    except Exception:
+                        continue
+
+            if not relevant_snapshots:
+                return ""
+
+            # Build summary from snapshots
+            summary_parts = ["**Timeline from Knowledge Graph:**"]
+            for ts, snapshot in relevant_snapshots[:5]:  # Limit to 5 snapshots
+                ts_str = ts.strftime("%B %d, %Y") if hasattr(ts, 'strftime') else str(ts)
+                summary_parts.append(f"\n**{ts_str}:**")
+
+                # Extract key entities from snapshot
+                events = []
+                for node_id, node_data in list(snapshot.items())[:10]:
+                    if isinstance(node_data, dict):
+                        name = node_data.get('name', node_id)
+                        status = node_data.get('status', '')
+                        if status:
+                            events.append(f"- {name}: {status}")
+
+                if events:
+                    summary_parts.extend(events[:5])
+
+            return "\n".join(summary_parts)
+        except Exception as e:
+            logger.warning(f"Could not get KG temporal summary: {e}")
+            return ""
+
     def chat(self, user_message: str, allowed_doc_types: List[str] = None) -> ChatResponse:
         """
         Process user message and generate response.
@@ -179,11 +358,36 @@ class ChatEngine:
             timestamp=datetime.now()
         ))
 
+        # Check if this is a personnel/team query that might need query expansion
+        personnel_keywords = ['who left', 'who joined', 'departed', 'resignation', 'new member',
+                             'team change', 'left the project', 'joined the project', 'quit', 'hired']
+        is_personnel_query = any(kw in user_message.lower() for kw in personnel_keywords)
+
+        # Check if this is a temporal/timestamp query
+        temporal_keywords = ['when', 'december', 'january', 'february', 'march', 'april',
+                             'last week', 'last month', 'what happened', 'timeline',
+                             'history', 'over time', 'changed', 'trend', 'before', 'after',
+                             '2025', '2026', 'sprint']
+        is_temporal_query = any(kw in user_message.lower() for kw in temporal_keywords)
+
+        # Check if this is a roles/responsibility query - should always consult KG
+        role_keywords = ['role', 'responsibility', 'responsibilities', 'who is responsible',
+                        'who handles', 'who manages', 'lead', 'owner', 'assigned to',
+                        'working on', 'team member', 'developer', 'qa', 'tester']
+        is_role_query = any(kw in user_message.lower() for kw in role_keywords)
+
         try:
             # Step 1: Try RAG (semantic search) first - this is now the default
             if self.rag_engine:
                 logger.info("Using RAG (semantic search) as primary source")
-                rag_response = self._query_rag(user_message, allowed_doc_types)
+
+                # Expand personnel queries for better RAG results
+                query_for_rag = user_message
+                if is_personnel_query:
+                    query_for_rag = f"{user_message} team member departures resignations new joiners staffing changes"
+                    logger.info(f"Expanded personnel query: {query_for_rag}")
+
+                rag_response = self._query_rag(query_for_rag, allowed_doc_types)
 
                 if rag_response and rag_response.confidence >= RAG_CONFIDENCE_THRESHOLD:
                     logger.info(f"RAG confidence {rag_response.confidence:.2f} >= {RAG_CONFIDENCE_THRESHOLD}, using RAG response")
@@ -196,6 +400,24 @@ class ChatEngine:
                     answer_text = rag_response.answer
                     if any(word in user_message.lower() for word in ['status', 'latest', 'current', 'now', 'today']):
                         answer_text = f"{answer_text}\n\n---\n*Data as of: {date_str}*"
+
+                    # For personnel queries, supplement with KG person data to ensure completeness
+                    if is_personnel_query:
+                        logger.info(f"Personnel query detected: {user_message}")
+                        try:
+                            kg_person_summary = self._get_kg_person_summary()
+                            if kg_person_summary:
+                                logger.info("Supplementing RAG response with KG person data for personnel query")
+                                answer_text = f"{answer_text}\n\n**Knowledge Graph Team Summary:**\n{kg_person_summary}"
+                        except Exception as e:
+                            logger.error(f"Error getting KG person summary: {e}")
+
+                    # For role/responsibility queries, supplement with KG role data
+                    if is_role_query:
+                        kg_role_summary = self._get_kg_role_summary()
+                        if kg_role_summary:
+                            logger.info("Supplementing RAG response with KG role data")
+                            answer_text = f"{answer_text}\n\n{kg_role_summary}"
 
                     response = ChatResponse(
                         answer=answer_text,
@@ -217,6 +439,43 @@ class ChatEngine:
                 else:
                     logger.info(f"RAG confidence {rag_response.confidence if rag_response else 0:.2f} < {RAG_CONFIDENCE_THRESHOLD}, falling back to Knowledge Graph")
 
+                    # For temporal queries with low RAG confidence, supplement with KG snapshot data
+                    if is_temporal_query and rag_response:
+                        kg_temporal = self._get_kg_temporal_summary(user_message)
+                        if kg_temporal:
+                            logger.info("Supplementing low-confidence RAG response with KG temporal data")
+                            answer_text = rag_response.answer
+                            answer_text = f"{answer_text}\n\n{kg_temporal}"
+
+                            # For personnel queries, also add person summary
+                            if is_personnel_query:
+                                kg_person_summary = self._get_kg_person_summary()
+                                if kg_person_summary:
+                                    answer_text = f"{answer_text}\n\n{kg_person_summary}"
+
+                            # For role queries, also add role summary
+                            if is_role_query:
+                                kg_role_summary = self._get_kg_role_summary()
+                                if kg_role_summary:
+                                    answer_text = f"{answer_text}\n\n{kg_role_summary}"
+
+                            response = ChatResponse(
+                                answer=answer_text,
+                                sources=rag_response.sources,
+                                data={"rag_used": True, "kg_supplemented": True, "source": "hybrid"},
+                                follow_up_questions=["What else would you like to know?"],
+                                confidence=min(0.6, rag_response.confidence + 0.2),  # Boost confidence
+                                query_type="hybrid_retrieval"
+                            )
+
+                            self.context.add_message(ChatMessage(
+                                role="assistant",
+                                content=response.answer,
+                                timestamp=datetime.now(),
+                                metadata={"sources": response.sources}
+                            ))
+                            return response
+
             # Step 2: Fall back to Knowledge Graph if RAG confidence is low
             logger.info("Using Knowledge Graph as source")
             plan = self.query_planner.create_plan(user_message)
@@ -228,6 +487,24 @@ class ChatEngine:
             # Generate response
             response = self._generate_response(user_message, plan, results)
             response.data["source"] = "knowledge_graph"
+
+            # For temporal queries, also add KG snapshot summary
+            if is_temporal_query:
+                kg_temporal = self._get_kg_temporal_summary(user_message)
+                if kg_temporal:
+                    response.answer = f"{response.answer}\n\n{kg_temporal}"
+
+            # For personnel queries, also add person summary
+            if is_personnel_query:
+                kg_person_summary = self._get_kg_person_summary()
+                if kg_person_summary:
+                    response.answer = f"{response.answer}\n\n{kg_person_summary}"
+
+            # For role queries, also add role summary
+            if is_role_query:
+                kg_role_summary = self._get_kg_role_summary()
+                if kg_role_summary:
+                    response.answer = f"{response.answer}\n\n{kg_role_summary}"
 
             # Add to context
             self.context.add_message(ChatMessage(
