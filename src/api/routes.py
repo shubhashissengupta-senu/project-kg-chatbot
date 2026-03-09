@@ -852,7 +852,9 @@ async def ingest_directory(
 async def ingest_single_file(
     request: Request,
     session_id: str,
-    file_path: str
+    file_path: str,
+    page_start: int = None,
+    page_end: int = None
 ):
     """
     Ingest a single file.
@@ -860,6 +862,8 @@ async def ingest_single_file(
     Args:
         session_id: User session ID
         file_path: Path to file to ingest
+        page_start: Starting page for PDFs (1-indexed, inclusive). None = first page.
+        page_end: Ending page for PDFs (1-indexed, inclusive). None = last page.
 
     Returns:
         Document information
@@ -880,7 +884,7 @@ async def ingest_single_file(
 
     try:
         pipeline = get_delivery_brain_pipeline()
-        document = pipeline.ingest_file(file_path)
+        document = pipeline.ingest_file(file_path, page_start=page_start, page_end=page_end)
 
         if document:
             return {

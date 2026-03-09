@@ -73,9 +73,17 @@ class DocumentHandler:
 
         return False
 
-    def extract_content(self, filepath: str) -> Tuple[str, Dict[str, Any]]:
+    def extract_content(self,
+                        filepath: str,
+                        page_start: int = None,
+                        page_end: int = None) -> Tuple[str, Dict[str, Any]]:
         """
         Extract content from a document file.
+
+        Args:
+            filepath: Path to the document
+            page_start: Starting page (1-indexed, inclusive). None = start from first page.
+            page_end: Ending page (1-indexed, inclusive). None = read to last page.
 
         Returns:
             Tuple of (content, metadata)
@@ -89,7 +97,7 @@ class DocumentHandler:
 
         try:
             if extension == ".pdf":
-                content, doc_metadata = self._extract_pdf(filepath)
+                content, doc_metadata = self._extract_pdf(filepath, page_start, page_end)
             elif extension in [".docx", ".doc"]:
                 content, doc_metadata = self._extract_docx(filepath)
             elif extension in [".pptx", ".ppt"]:
@@ -111,8 +119,21 @@ class DocumentHandler:
 
         return content, metadata
 
-    def _extract_pdf(self, filepath: str) -> Tuple[str, Dict[str, Any]]:
-        """Extract content from PDF file"""
+    def _extract_pdf(self,
+                     filepath: str,
+                     page_start: int = None,
+                     page_end: int = None) -> Tuple[str, Dict[str, Any]]:
+        """
+        Extract content from PDF file.
+
+        Args:
+            filepath: Path to PDF file
+            page_start: Starting page (1-indexed, inclusive). None = first page.
+            page_end: Ending page (1-indexed, inclusive). None = last page.
+
+        Returns:
+            Tuple of (content, metadata)
+        """
         import pypdf
 
         metadata = {}
@@ -120,7 +141,21 @@ class DocumentHandler:
 
         with open(filepath, "rb") as f:
             reader = pypdf.PdfReader(f)
-            metadata["page_count"] = len(reader.pages)
+            total_pages = len(reader.pages)
+            metadata["page_count"] = total_pages
+
+            # Calculate page range (convert to 0-indexed)
+            start_idx = (page_start - 1) if page_start and page_start > 0 else 0
+            end_idx = page_end if page_end and page_end <= total_pages else total_pages
+
+            # Validate range
+            if start_idx >= total_pages:
+                start_idx = 0
+            if end_idx < start_idx:
+                end_idx = total_pages
+
+            metadata["pages_extracted"] = f"{start_idx + 1}-{end_idx}"
+            metadata["pages_extracted_count"] = end_idx - start_idx
 
             # Extract document info
             if reader.metadata:
@@ -133,8 +168,9 @@ class DocumentHandler:
                 if reader.metadata.creator:
                     metadata["creator"] = reader.metadata.creator
 
-            # Extract text from each page
-            for i, page in enumerate(reader.pages):
+            # Extract text from selected pages
+            for i in range(start_idx, end_idx):
+                page = reader.pages[i]
                 try:
                     page_text = page.extract_text()
                     if page_text:

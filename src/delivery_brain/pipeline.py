@@ -170,12 +170,17 @@ class DeliveryBrainPipeline:
 
         return result
 
-    def ingest_file(self, filepath: str) -> Optional[IngestedDocument]:
+    def ingest_file(self,
+                    filepath: str,
+                    page_start: int = None,
+                    page_end: int = None) -> Optional[IngestedDocument]:
         """
         Ingest a single file.
 
         Args:
             filepath: Path to file
+            page_start: Starting page for PDFs (1-indexed, inclusive). None = first page.
+            page_end: Ending page for PDFs (1-indexed, inclusive). None = last page.
 
         Returns:
             IngestedDocument or None if failed
@@ -206,7 +211,11 @@ class DeliveryBrainPipeline:
                 file_type = self._get_text_file_type(extension)
                 transcription_segments = None
             elif self.config.is_document_file(filepath):
-                content, metadata = self.document_handler.extract_content(filepath)
+                content, metadata = self.document_handler.extract_content(
+                    filepath,
+                    page_start=page_start,
+                    page_end=page_end
+                )
                 file_type = self._get_document_file_type(extension)
                 transcription_segments = None
             elif self.config.is_media_file(filepath):
