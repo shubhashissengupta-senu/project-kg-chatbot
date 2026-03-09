@@ -139,7 +139,13 @@ class DeliveryBrainPipeline:
         logger.info(f"Starting ingestion of {len(files)} files from {directory}")
 
         # Process files
-        if self.config.parallel_processing and len(files) > 1:
+        # Note: TinyDB is not thread-safe, so force sequential processing when using it
+        use_parallel = (
+            self.config.parallel_processing and
+            len(files) > 1 and
+            self.config.storage.nosql_type != "tinydb"
+        )
+        if use_parallel:
             self._process_files_parallel(files, result)
         else:
             self._process_files_sequential(files, result)
