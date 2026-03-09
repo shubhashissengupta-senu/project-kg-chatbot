@@ -118,6 +118,45 @@ class ChatEngine:
         else:
             logger.info("ChatEngine initialized without LLM (using templates)")
 
+    def _get_latest_data_timestamp(self) -> datetime:
+        """Get the latest timestamp from the knowledge graph data (documents/events)"""
+        try:
+            # Get timeline events to find the latest actual data date
+            timeline = self.query_engine.get_timeline(
+                datetime(2025, 1, 1),
+                datetime(2027, 12, 31)
+            )
+            if timeline:
+                # Filter for meaningful events (meetings, reviews)
+                meaningful_events = [
+                    e for e in timeline
+                    if e.get('type') and 'Meeting' in str(e.get('type', ''))
+                ]
+                if meaningful_events:
+                    # Get the latest event timestamp
+                    latest = max(meaningful_events, key=lambda x: x.get('timestamp', datetime.min))
+                    ts = latest.get('timestamp')
+                    if isinstance(ts, datetime):
+                        return ts
+                    elif isinstance(ts, str):
+                        return datetime.fromisoformat(ts.replace('Z', '+00:00').split('+')[0])
+        except Exception as e:
+            logger.warning(f"Could not get latest timestamp from timeline: {e}")
+
+        # Fallback: try snapshots
+        try:
+            snapshots = self.query_engine.snapshots
+            if hasattr(snapshots, 'timeline') and snapshots.timeline:
+                # Filter out "today" dates - look for actual document dates
+                valid_dates = [t for t in snapshots.timeline if t < datetime.now()]
+                if valid_dates:
+                    return max(valid_dates)
+        except Exception as e:
+            logger.warning(f"Could not get latest timestamp from snapshots: {e}")
+
+        # Default fallback - last known document date
+        return datetime(2026, 2, 23)
+
     def chat(self, user_message: str, allowed_doc_types: List[str] = None) -> ChatResponse:
         """
         Process user message and generate response.
@@ -148,10 +187,20 @@ class ChatEngine:
 
                 if rag_response and rag_response.confidence >= RAG_CONFIDENCE_THRESHOLD:
                     logger.info(f"RAG confidence {rag_response.confidence:.2f} >= {RAG_CONFIDENCE_THRESHOLD}, using RAG response")
+
+                    # Add data timestamp info to RAG response
+                    latest_timestamp = self._get_latest_data_timestamp()
+                    date_str = latest_timestamp.strftime("%B %d, %Y")
+
+                    # Append data freshness note to answer if asking about status/latest
+                    answer_text = rag_response.answer
+                    if any(word in user_message.lower() for word in ['status', 'latest', 'current', 'now', 'today']):
+                        answer_text = f"{answer_text}\n\n---\n*Data as of: {date_str}*"
+
                     response = ChatResponse(
-                        answer=rag_response.answer,
+                        answer=answer_text,
                         sources=rag_response.sources,
-                        data={"rag_used": True, "source": "vector_db"},
+                        data={"rag_used": True, "source": "vector_db", "data_as_of": date_str},
                         follow_up_questions=["What else would you like to know?", "Can you tell me more about this?"],
                         confidence=rag_response.confidence,
                         query_type="rag_retrieval"
@@ -230,8 +279,10 @@ class ChatEngine:
             timestamp = plan.time_constraints.get("point") or plan.time_constraints.get("end")
 
         if plan.query_type == QueryType.STATUS:
-            timestamp = timestamp or datetime(2026, 3, 7)
+            # Use actual latest data timestamp instead of hardcoded date
+            timestamp = timestamp or self._get_latest_data_timestamp()
             results["data"] = self.query_engine.get_project_state_at(timestamp)
+            results["data"]["data_as_of"] = timestamp  # Ensure timestamp is included
 
         elif plan.query_type == QueryType.POINT_IN_TIME:
             if timestamp:
@@ -496,18 +547,32 @@ Guidelines:
             return f"Unable to retrieve status: {data['error']}"
 
         parts = []
-        parts.append(f"**Project Status as of {data.get('timestamp', 'now')}**")
+
+        # Format the data timestamp clearly
+        data_timestamp = data.get('data_as_of') or data.get('timestamp')
+        if isinstance(data_timestamp, datetime):
+            date_str = data_timestamp.strftime("%B %d, %Y")
+        else:
+            date_str = str(data_timestamp) if data_timestamp else "latest available"
+
+        parts.append(f"**Project Status**")
+        parts.append(f"*Data as of: {date_str}*")
 
         # Team
         team = data.get("team", [])
         parts.append(f"\n**Team:** {len(team)} active members")
+        if team:
+            team_names = [t.get('name', 'Unknown') for t in team[:5]]
+            parts.append(f"  Members: {', '.join(team_names)}" + (" ..." if len(team) > 5 else ""))
 
         # Streams
         streams = data.get("streams", [])
-        for stream in streams:
-            status = stream.get("status", "Unknown")
-            completion = stream.get("completion_pct", 0)
-            parts.append(f"- {stream.get('name')}: {status} ({completion:.0f}% complete)")
+        if streams:
+            parts.append("\n**Work Streams:**")
+            for stream in streams:
+                status = stream.get("status", "Unknown")
+                completion = stream.get("completion_pct", 0)
+                parts.append(f"- {stream.get('name')}: {status} ({completion:.0f}% complete)")
 
         # Risks
         risks = data.get("open_risks", [])
@@ -522,6 +587,9 @@ Guidelines:
             parts.append("\n**Key Metrics:**")
             for key, value in list(metrics.items())[:5]:
                 parts.append(f"- {key}: {value}")
+
+        # Add note about data freshness
+        parts.append(f"\n---\n*Note: This information reflects the project state as of {date_str}.*")
 
         return "\n".join(parts)
 
