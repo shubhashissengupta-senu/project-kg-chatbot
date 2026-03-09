@@ -683,7 +683,7 @@ async def get_sentiment_analysis(request: Request, session_id: str):
         meeting_num = meeting.get("meeting_number", 0)
 
         sentiment_data = {
-            "date": date.isoformat() if hasattr(date, 'isoformat') else str(date) if date else None,
+            "date": date.strftime("%Y-%m-%d") if hasattr(date, 'strftime') else str(date).split('T')[0] if date else None,
             "meeting_number": meeting_num,
             "sentiment": sentiment,
             "score": _sentiment_to_score(sentiment),
