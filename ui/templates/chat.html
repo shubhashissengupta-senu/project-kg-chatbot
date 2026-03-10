@@ -8,6 +8,8 @@
     <script src="https://cdn.jsdelivr.net/npm/vega@5"></script>
     <script src="https://cdn.jsdelivr.net/npm/vega-lite@5"></script>
     <script src="https://cdn.jsdelivr.net/npm/vega-embed@6"></script>
+    <!-- Mermaid.js for diagram rendering -->
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
@@ -183,6 +185,39 @@
         .chart-container .vega-embed .vega-actions {
             display: none;
         }
+        /* Mermaid diagram styling */
+        .mermaid-container {
+            background: rgba(26, 26, 46, 0.9);
+            padding: 20px;
+            overflow-x: auto;
+        }
+        .mermaid-container .mermaid {
+            display: flex;
+            justify-content: center;
+        }
+        .mermaid-container svg {
+            max-width: 100%;
+            height: auto;
+        }
+        /* Override Mermaid timeline colors for better visibility */
+        .mermaid-container .timeline-title {
+            fill: #fff !important;
+            font-size: 16px !important;
+            font-weight: bold !important;
+        }
+        .mermaid-container .timeline-section-title {
+            fill: #a8b4ff !important;
+        }
+        .mermaid-container text {
+            fill: #ddd !important;
+        }
+        .mermaid-container .node rect {
+            fill: #667eea !important;
+            stroke: #764ba2 !important;
+        }
+        .mermaid-container .node text {
+            fill: #fff !important;
+        }
         .data-table {
             margin-top: 12px;
             width: 100%;
@@ -273,6 +308,27 @@
     </div>
 
     <script>
+        // Initialize Mermaid with dark theme
+        mermaid.initialize({
+            startOnLoad: false,
+            theme: 'dark',
+            themeVariables: {
+                primaryColor: '#667eea',
+                primaryTextColor: '#fff',
+                primaryBorderColor: '#764ba2',
+                lineColor: '#aaa',
+                secondaryColor: '#1a1a2e',
+                tertiaryColor: '#0f0f1a',
+                background: '#0f0f1a',
+                mainBkg: '#1a1a2e',
+                textColor: '#fff',
+                fontSize: '14px'
+            },
+            timeline: {
+                disableMulticolor: false
+            }
+        });
+
         const sessionId = localStorage.getItem('session_id');
         const user = JSON.parse(localStorage.getItem('user') || '{}');
 
@@ -297,9 +353,34 @@
             div.className = `message ${isUser ? 'user' : 'assistant'}`;
 
             const header = `<div class="message-header">${isUser ? 'You' : 'Assistant'}</div>`;
-            let body = content.replace(/\n/g, '<br>').replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
 
-            // Add chart container if visualization is present
+            // Process content - handle Mermaid code blocks
+            let body = content;
+            let mermaidBlocks = [];
+
+            // Extract mermaid code blocks and replace with placeholders
+            const mermaidRegex = /```mermaid\s*([\s\S]*?)```/gi;
+            let match;
+            let blockIndex = 0;
+            while ((match = mermaidRegex.exec(content)) !== null) {
+                const mermaidCode = match[1].trim();
+                const placeholder = `<!--MERMAID_BLOCK_${blockIndex}-->`;
+                body = body.replace(match[0], placeholder);
+                mermaidBlocks.push({ index: blockIndex, code: mermaidCode });
+                blockIndex++;
+            }
+
+            // Convert remaining markdown
+            body = body.replace(/\n/g, '<br>').replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+
+            // Replace mermaid placeholders with actual containers
+            mermaidBlocks.forEach(block => {
+                const mermaidId = 'mermaid-' + Date.now() + '-' + block.index;
+                const mermaidHtml = `<div class="chart-container mermaid-container"><pre class="mermaid" id="${mermaidId}">${block.code}</pre></div>`;
+                body = body.replace(`<!--MERMAID_BLOCK_${block.index}-->`, mermaidHtml);
+            });
+
+            // Add Vega-Lite chart container if visualization is present
             let chartHtml = '';
             if (visualization) {
                 const chartId = 'chart-' + Date.now();
@@ -318,10 +399,23 @@
             container.appendChild(div);
             container.scrollTop = container.scrollHeight;
 
+            // Render Mermaid diagrams
+            if (mermaidBlocks.length > 0) {
+                setTimeout(() => {
+                    try {
+                        mermaid.run({ nodes: div.querySelectorAll('.mermaid') });
+                    } catch (e) {
+                        console.error('Mermaid rendering error:', e);
+                    }
+                }, 100);
+            }
+
             // Render Vega-Lite chart if visualization is present
             if (visualization) {
-                const chartId = div.querySelector('.chart-container > div').id;
-                renderChart(chartId, visualization);
+                const chartId = div.querySelector('.chart-container:not(.mermaid-container) > div')?.id;
+                if (chartId) {
+                    renderChart(chartId, visualization);
+                }
             }
         }
 

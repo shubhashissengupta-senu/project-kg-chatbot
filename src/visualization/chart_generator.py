@@ -20,8 +20,12 @@ class ChartGenerator:
     COMPARISON_KEYWORDS = ['compare', 'comparison', 'versus', 'vs', 'between', 'difference']
     DISTRIBUTION_KEYWORDS = ['distribution', 'breakdown', 'split', 'composition', 'allocation']
     METRICS_KEYWORDS = ['metrics', 'velocity', 'defects', 'bugs', 'coverage', 'productivity',
-                        'performance', 'quality', 'code churn', 'commits']
+                        'performance', 'quality', 'code churn', 'commits', 'completion',
+                        'rates', 'percentage', 'score', 'statistics', 'stats']
     FINANCIAL_KEYWORDS = ['budget', 'cost', 'revenue', 'margin', 'cpi', 'spi', 'expense']
+    TIMELINE_KEYWORDS = ['timeline', 'staffing', 'personnel', 'gantt', 'schedule', 'joined',
+                         'left the project', 'departed', 'onboarding', 'offboarding', 'team changes',
+                         'staff changes', 'who joined', 'who left', 'resource changes']
 
     def __init__(self):
         self.chart_width = 500
@@ -37,9 +41,15 @@ class ChartGenerator:
         has_distribution = any(kw in query_lower for kw in self.DISTRIBUTION_KEYWORDS)
         has_metrics = any(kw in query_lower for kw in self.METRICS_KEYWORDS)
         has_financial = any(kw in query_lower for kw in self.FINANCIAL_KEYWORDS)
+        has_timeline = any(kw in query_lower for kw in self.TIMELINE_KEYWORDS)
 
         # Check if data contains numeric values worth visualizing
         has_numeric_data = self._has_visualizable_data(data, answer)
+
+        # Timeline charts can work with date-based text data too
+        if has_timeline:
+            has_timeline_data = self._has_timeline_data(data, answer)
+            return has_timeline_data
 
         return (has_trend or has_comparison or has_distribution or has_metrics or has_financial) and has_numeric_data
 
@@ -62,11 +72,45 @@ class ChartGenerator:
             r'\d+%',  # percentages
             r'\d+\.\d+',  # decimals
             r'[\$\₹]\s*[\d,]+',  # currency
-            r'\b\d{1,3}(?:,\d{3})*\b',  # large numbers
+            r'\b\d{1,3}(?:,\d{3})+\b',  # large numbers with commas (450,000)
+            r'\b\d{4,}\b',  # large numbers without commas (450000)
+            r':\s*\d+\b',  # numbers after colon (Category: 123)
+            r'\b\d+(?:ms|s|/s|kb|mb|gb)\b',  # numbers with units (200ms, 1000/s)
+            r'\w+:\s*\d+(?:\s*,|\s*$)',  # label: number pattern (SD: 5, EWM: 4)
         ]
         for pattern in numeric_patterns:
             if len(re.findall(pattern, answer)) >= 2:
                 return True
+
+        return False
+
+    def _has_timeline_data(self, data: Dict, answer: str) -> bool:
+        """Check if there's timeline/staffing data worth visualizing."""
+        # Check for date patterns in answer (staffing events)
+        date_patterns = [
+            r'(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},?\s*\d{4}',
+            r'\d{1,2}/\d{1,2}/\d{4}',
+            r'(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{1,2}',
+        ]
+        for pattern in date_patterns:
+            if len(re.findall(pattern, answer, re.IGNORECASE)) >= 1:
+                return True
+
+        # Check for staffing event keywords with names
+        staffing_patterns = [
+            r'(\w+)\s+(?:joined|left|departed|started|resigned)',
+            r'(?:joined|left|departed|started|resigned).*?(\w+)',
+        ]
+        for pattern in staffing_patterns:
+            if re.search(pattern, answer, re.IGNORECASE):
+                return True
+
+        # Check data dict for timeline info
+        if data:
+            timeline_keys = ['events', 'timeline', 'staffing', 'personnel', 'changes']
+            for key in timeline_keys:
+                if key in data:
+                    return True
 
         return False
 
@@ -76,6 +120,15 @@ class ChartGenerator:
             return None
 
         query_lower = query.lower()
+
+        # Check for timeline queries FIRST - they don't need numeric chart_data
+        if any(kw in query_lower for kw in self.TIMELINE_KEYWORDS):
+            timeline_data = self._extract_timeline_data(query, data, answer)
+            if timeline_data and len(timeline_data) >= 1:
+                return self._create_timeline_chart(timeline_data, query)
+            # Fallback: try to extract regular chart data
+            chart_data = self._extract_chart_data(query, data, answer, query_type)
+            return self._create_bar_chart(chart_data, query) if chart_data and len(chart_data) >= 2 else None
 
         # Try to extract structured data from answer if data dict is sparse
         chart_data = self._extract_chart_data(query, data, answer, query_type)
@@ -343,6 +396,180 @@ class ChartGenerator:
             }
         }
 
+    def _extract_timeline_data(self, query: str, data: Dict, answer: str) -> List[Dict]:
+        """Extract staffing/timeline events from answer text."""
+        events = []
+        seen_events = set()  # Avoid duplicates
+
+        # Pattern to extract staffing events - multiple formats
+        patterns = [
+            # "Mousumi left January 23, 2026" or "Mousumi departed on Jan 23"
+            (r'(\w+(?:\s+\w+)?)\s+(?:left|departed|resigned|exited)\s+(?:on\s+)?(?:the\s+project\s+)?(?:on\s+)?((?:January|February|March|April|May|June|July|August|September|October|November|December|Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{1,2},?\s*\d{0,4})', 'departure'),
+            # "Nayan joined January 28, 2026"
+            (r'(\w+(?:\s+\w+)?)\s+(?:joined|started|onboarded)\s+(?:on\s+)?(?:the\s+project\s+)?(?:on\s+)?((?:January|February|March|April|May|June|July|August|September|October|November|December|Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{1,2},?\s*\d{0,4})', 'joining'),
+            # "Raj on medical leave December 26 - January 10"
+            (r'(\w+)\s+(?:was\s+)?(?:on\s+)?(?:medical\s+)?leave\s+((?:January|February|March|April|May|June|July|August|September|October|November|December|Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{1,2})', 'leave'),
+            # "Lakshmi leaving March 6"
+            (r'(\w+(?:\s+\w+)?)\s+(?:leaving|will leave|notice)\s+(?:on\s+)?((?:January|February|March|April|May|June|July|August|September|October|November|December|Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{1,2},?\s*\d{0,4})', 'departure'),
+            # "Sandeep joins to assist" - capitalized name followed by action verb
+            (r'\b([A-Z][a-z]+)\s+(?:joins|joined|added)\b', 'joining'),
+            # "Nayan provides/providing experience support"
+            (r'\b([A-Z][a-z]+)\s+(?:provides?|providing|contributing|gives?)\s+(?:\w+\s+)?(?:support|experience|help)', 'joining'),
+            # "Sandeep added to assist"
+            (r'\b([A-Z][a-z]+)\s+(?:added|assigned|brought in)\s+(?:to\s+)?(?:assist|help|support)', 'joining'),
+        ]
+
+        # Also look for date context in surrounding text
+        date_context = None
+        date_match = re.search(r'((?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},?\s*\d{4})', answer)
+        if date_match:
+            date_context = date_match.group(1)
+
+        for pattern, event_type in patterns:
+            matches = re.findall(pattern, answer, re.IGNORECASE)
+            for match in matches:
+                name = None
+                date = date_context or 'TBD'
+
+                # Handle both tuple (2 groups) and string (1 group) matches
+                if isinstance(match, tuple) and len(match) == 2:
+                    first, second = match
+                    # Determine which is name and which is date
+                    if re.match(r'(?:January|February|March|April|May|June|July|August|September|October|November|December)', first, re.IGNORECASE):
+                        date, name = first, second
+                    else:
+                        name, date = first, second
+                elif isinstance(match, str):
+                    # Single group match - it's the name
+                    name = match
+
+                if not name:
+                    continue
+
+                # If no date extracted, use context date
+                if date and not re.search(r'\d', str(date)) and date_context:
+                    date = date_context
+
+                # Filter out common non-name words
+                skip_words = ['the', 'a', 'an', 'project', 'team', 'stream', 'ewm', 'sd',
+                              'recovery', 'staffing', 'initial', 'week', 'sprint', 'plan',
+                              'update', 'discussed', 'meeting', 'january', 'february', 'march',
+                              'april', 'may', 'june', 'july', 'august', 'september', 'october',
+                              'november', 'december']
+                if name.lower().strip() in skip_words:
+                    continue
+
+                event_key = f"{name.strip().lower()}_{event_type}"
+                if event_key not in seen_events:
+                    seen_events.add(event_key)
+                    events.append({
+                        'person': name.strip().title(),
+                        'date': str(date).strip() if date else 'TBD',
+                        'event_type': event_type,
+                        'order': len(events)
+                    })
+
+        # If no pattern matches, try to parse from data dict
+        if not events and data:
+            if 'staffing' in data or 'personnel' in data or 'events' in data:
+                raw_events = data.get('staffing') or data.get('personnel') or data.get('events', [])
+                if isinstance(raw_events, list):
+                    for item in raw_events:
+                        if isinstance(item, dict):
+                            events.append(item)
+
+        return events
+
+    def _create_timeline_chart(self, data: List[Dict], query: str) -> Dict:
+        """Create a Vega-Lite timeline/Gantt-style chart for staffing events."""
+        title = "Staffing Timeline"
+        if 'change' in query.lower():
+            title = "Staffing Changes Timeline"
+
+        # Assign colors based on event type
+        color_map = {
+            'joining': '#4ade80',      # green
+            'departure': '#f87171',    # red
+            'leave': '#fbbf24',        # yellow/amber
+            'return': '#60a5fa',       # blue
+        }
+
+        # Enrich data with colors and normalize
+        enriched_data = []
+        for idx, event in enumerate(data):
+            event_type = event.get('event_type', 'joining').lower()
+            enriched_data.append({
+                'person': event.get('person', f'Person {idx+1}'),
+                'date': event.get('date', ''),
+                'event_type': event_type.capitalize(),
+                'color': color_map.get(event_type, '#667eea'),
+                'order': event.get('order', idx)
+            })
+
+        return {
+            "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+            "title": title,
+            "width": self.chart_width,
+            "height": max(self.chart_height, len(enriched_data) * 50),
+            "data": {"values": enriched_data},
+            "mark": {
+                "type": "point",
+                "size": 200,
+                "filled": True
+            },
+            "encoding": {
+                "y": {
+                    "field": "person",
+                    "type": "nominal",
+                    "title": "Team Member",
+                    "sort": {"field": "order"},
+                    "axis": {"labelColor": "#fff", "titleColor": "#fff"}
+                },
+                "x": {
+                    "field": "date",
+                    "type": "ordinal",
+                    "title": "Date",
+                    "axis": {"labelAngle": -45, "labelColor": "#aaa", "titleColor": "#fff"}
+                },
+                "color": {
+                    "field": "event_type",
+                    "type": "nominal",
+                    "title": "Event",
+                    "scale": {
+                        "domain": ["Joining", "Departure", "Leave", "Return"],
+                        "range": ["#4ade80", "#f87171", "#fbbf24", "#60a5fa"]
+                    },
+                    "legend": {"labelColor": "#aaa", "titleColor": "#fff"}
+                },
+                "shape": {
+                    "field": "event_type",
+                    "type": "nominal",
+                    "scale": {
+                        "domain": ["Joining", "Departure", "Leave", "Return"],
+                        "range": ["circle", "cross", "triangle-up", "diamond"]
+                    }
+                },
+                "tooltip": [
+                    {"field": "person", "type": "nominal", "title": "Person"},
+                    {"field": "date", "type": "nominal", "title": "Date"},
+                    {"field": "event_type", "type": "nominal", "title": "Event"}
+                ]
+            },
+            "config": {
+                "background": "transparent",
+                "axis": {
+                    "labelColor": "#aaa",
+                    "titleColor": "#fff",
+                    "gridColor": "#333"
+                },
+                "title": {"color": "#fff"},
+                "legend": {
+                    "labelColor": "#aaa",
+                    "titleColor": "#fff"
+                }
+            }
+        }
+
     def _generate_chart_title(self, query: str, chart_type: str) -> str:
         """Generate an appropriate chart title based on query."""
         # Extract key terms from query
@@ -361,12 +588,17 @@ class ChartGenerator:
             return "Productivity Trends" if chart_type == 'trend' else "Productivity Comparison"
         elif 'coverage' in query_lower:
             return "Test Coverage Over Time" if chart_type == 'trend' else "Coverage by Component"
+        elif 'staffing' in query_lower or 'personnel' in query_lower:
+            return "Staffing Changes Timeline"
+        elif 'timeline' in query_lower:
+            return "Project Timeline"
 
         # Default titles
         type_titles = {
             'trend': "Trend Analysis",
             'comparison': "Comparison",
-            'distribution': "Distribution"
+            'distribution': "Distribution",
+            'timeline': "Timeline"
         }
         return type_titles.get(chart_type, "Data Visualization")
 
