@@ -15,6 +15,7 @@ from ..time_series.metrics_store import TimeSeriesMetricsStore
 from ..time_series.trend_analyzer import TrendAnalyzer
 from ..rag.rag_engine import RAGEngine
 from ..llm.llm_service import LLMService
+from ..visualization.chart_generator import ChartGenerator
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +38,7 @@ class ChatResponse:
     follow_up_questions: List[str]
     confidence: float
     query_type: str
+    visualization: Optional[Dict] = None  # Vega-Lite chart spec
 
 
 class ConversationContext:
@@ -111,6 +113,7 @@ class ChatEngine:
 
         self.query_planner = QueryPlanner()
         self.context = ConversationContext()
+        self.chart_generator = ChartGenerator()
 
         # Log LLM availability
         if self.llm and self.llm.is_available():
@@ -419,13 +422,22 @@ class ChatEngine:
                             logger.info("Supplementing RAG response with KG role data")
                             answer_text = f"{answer_text}\n\n{kg_role_summary}"
 
+                    # Generate visualization if appropriate
+                    visualization = self._generate_visualization(
+                        query=user_message,
+                        data={"rag_used": True},
+                        answer=answer_text,
+                        query_type="rag_retrieval"
+                    )
+
                     response = ChatResponse(
                         answer=answer_text,
                         sources=rag_response.sources,
                         data={"rag_used": True, "source": "vector_db", "data_as_of": date_str},
                         follow_up_questions=["What else would you like to know?", "Can you tell me more about this?"],
                         confidence=rag_response.confidence,
-                        query_type="rag_retrieval"
+                        query_type="rag_retrieval",
+                        visualization=visualization
                     )
 
                     # Add to context
@@ -459,13 +471,22 @@ class ChatEngine:
                                 if kg_role_summary:
                                     answer_text = f"{answer_text}\n\n{kg_role_summary}"
 
+                            # Generate visualization if appropriate
+                            visualization = self._generate_visualization(
+                                query=user_message,
+                                data={"rag_used": True, "kg_supplemented": True},
+                                answer=answer_text,
+                                query_type="hybrid_retrieval"
+                            )
+
                             response = ChatResponse(
                                 answer=answer_text,
                                 sources=rag_response.sources,
                                 data={"rag_used": True, "kg_supplemented": True, "source": "hybrid"},
                                 follow_up_questions=["What else would you like to know?"],
                                 confidence=min(0.6, rag_response.confidence + 0.2),  # Boost confidence
-                                query_type="hybrid_retrieval"
+                                query_type="hybrid_retrieval",
+                                visualization=visualization
                             )
 
                             self.context.add_message(ChatMessage(
@@ -505,6 +526,15 @@ class ChatEngine:
                 kg_role_summary = self._get_kg_role_summary()
                 if kg_role_summary:
                     response.answer = f"{response.answer}\n\n{kg_role_summary}"
+
+            # Re-generate visualization with updated answer if not already present
+            if response.visualization is None:
+                response.visualization = self._generate_visualization(
+                    query=user_message,
+                    data=response.data,
+                    answer=response.answer,
+                    query_type=response.query_type
+                )
 
             # Add to context
             self.context.add_message(ChatMessage(
@@ -704,14 +734,31 @@ class ChatEngine:
         # Generate follow-up questions
         follow_ups = self._generate_follow_ups(plan, results)
 
+        # Generate visualization if appropriate
+        visualization = self._generate_visualization(
+            query=plan.original_query if hasattr(plan, 'original_query') else "",
+            data=results.get("data", {}),
+            answer=answer,
+            query_type=plan.query_type.value
+        )
+
         return ChatResponse(
             answer=answer,
             sources=sources,
             data=results.get("data", {}),
             follow_up_questions=follow_ups,
             confidence=confidence,
-            query_type=plan.query_type.value
+            query_type=plan.query_type.value,
+            visualization=visualization
         )
+
+    def _generate_visualization(self, query: str, data: Dict, answer: str, query_type: str) -> Optional[Dict]:
+        """Generate Vega-Lite visualization if appropriate for the query."""
+        try:
+            return self.chart_generator.generate_chart(query, data, answer, query_type)
+        except Exception as e:
+            logger.warning(f"Error generating visualization: {e}")
+            return None
 
     def _generate_llm_response(self, query: str, plan: QueryPlan, results: Dict) -> str:
         """Generate response using LLM"""

@@ -48,6 +48,7 @@ class ChatResponse(BaseModel):
     sources: List[Dict]
     follow_up_questions: List[str]
     confidence: float
+    visualization: Optional[Dict] = None  # Vega-Lite chart spec
 
 
 class SimulationRequest(BaseModel):
@@ -186,7 +187,8 @@ async def send_message(request: Request, chat_data: ChatRequest):
         data=filtered_data,
         sources=filtered_sources,
         follow_up_questions=response.follow_up_questions,
-        confidence=response.confidence
+        confidence=response.confidence,
+        visualization=response.visualization
     )
 
 

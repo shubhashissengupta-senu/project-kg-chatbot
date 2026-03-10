@@ -4,6 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Chat - Delivery Brain</title>
+    <!-- Vega-Lite for data visualization -->
+    <script src="https://cdn.jsdelivr.net/npm/vega@5"></script>
+    <script src="https://cdn.jsdelivr.net/npm/vega-lite@5"></script>
+    <script src="https://cdn.jsdelivr.net/npm/vega-embed@6"></script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
@@ -166,6 +170,38 @@
         }
         .chip:hover { background: rgba(102,126,234,0.3); }
         .typing { opacity: 0.7; font-style: italic; }
+        .chart-container {
+            margin-top: 16px;
+            padding: 16px;
+            background: rgba(0,0,0,0.2);
+            border-radius: 12px;
+            overflow: hidden;
+        }
+        .chart-container .vega-embed {
+            width: 100%;
+        }
+        .chart-container .vega-embed .vega-actions {
+            display: none;
+        }
+        .data-table {
+            margin-top: 12px;
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+        .data-table th, .data-table td {
+            padding: 8px 12px;
+            text-align: left;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+        .data-table th {
+            background: rgba(102,126,234,0.2);
+            font-weight: 600;
+            color: #a8b4ff;
+        }
+        .data-table tr:hover {
+            background: rgba(255,255,255,0.05);
+        }
         .follow-up {
             margin-top: 12px;
             padding-top: 12px;
@@ -255,25 +291,51 @@
             sendMessage();
         }
 
-        function addMessage(content, isUser, followUps = null) {
+        function addMessage(content, isUser, followUps = null, visualization = null) {
             const container = document.getElementById('chatContainer');
             const div = document.createElement('div');
             div.className = `message ${isUser ? 'user' : 'assistant'}`;
 
-            const header = `<div class="message-header">${isUser ? '👤 You' : '🤖 Assistant'}</div>`;
+            const header = `<div class="message-header">${isUser ? 'You' : 'Assistant'}</div>`;
             let body = content.replace(/\n/g, '<br>').replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+
+            // Add chart container if visualization is present
+            let chartHtml = '';
+            if (visualization) {
+                const chartId = 'chart-' + Date.now();
+                chartHtml = `<div class="chart-container"><div id="${chartId}"></div></div>`;
+            }
 
             let followUpHtml = '';
             if (followUps && followUps.length > 0) {
                 followUpHtml = `<div class="follow-up">
-                    <div class="follow-up-label">💡 Suggested:</div>
+                    <div class="follow-up-label">Suggested:</div>
                     ${followUps.slice(0, 3).map(q => `<span class="follow-up-btn" onclick="askQuestion('${q.replace(/'/g, "\\'")}')">${q}</span>`).join('')}
                 </div>`;
             }
 
-            div.innerHTML = header + body + followUpHtml;
+            div.innerHTML = header + body + chartHtml + followUpHtml;
             container.appendChild(div);
             container.scrollTop = container.scrollHeight;
+
+            // Render Vega-Lite chart if visualization is present
+            if (visualization) {
+                const chartId = div.querySelector('.chart-container > div').id;
+                renderChart(chartId, visualization);
+            }
+        }
+
+        async function renderChart(elementId, spec) {
+            try {
+                await vegaEmbed('#' + elementId, spec, {
+                    actions: false,
+                    renderer: 'svg',
+                    theme: 'dark'
+                });
+            } catch (error) {
+                console.error('Error rendering chart:', error);
+                document.getElementById(elementId).innerHTML = '<p style="color:#ff6b6b;font-size:12px;">Chart could not be rendered</p>';
+            }
         }
 
         async function sendMessage() {
@@ -302,7 +364,8 @@
                     console.log('Chat response:', data);
                     const answer = data.answer || 'No response generated.';
                     const followUps = data.follow_up_questions || [];
-                    addMessage(answer, false, followUps);
+                    const visualization = data.visualization || null;
+                    addMessage(answer, false, followUps, visualization);
                 } else {
                     const errData = await response.json().catch(() => ({}));
                     console.error('Chat error:', errData);
